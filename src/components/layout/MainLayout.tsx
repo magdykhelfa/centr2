@@ -76,7 +76,7 @@ export const MainLayout = ({ children, user, onLogout }: any) => {
       <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl z-30 shrink-0 h-full">
         <div className="p-6 flex items-center gap-3 border-b border-slate-800/50">
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg"><GraduationCap className="text-white w-6 h-6" /></div>
-          <div className="flex flex-col"><span className="font-black text-lg">المدرس الذكي </span><span className="text-[10px] text-primary font-bold tracking-tighter uppercase">v2.0 2026</span></div>
+          <div className="flex flex-col"><span className="font-black text-lg">السنتر الذكي </span><span className="text-[10px] text-primary font-bold tracking-tighter uppercase">v2.0 2026</span></div>
         </div>
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
           {menuItems.map((item) => {
