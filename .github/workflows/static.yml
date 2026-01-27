@@ -26,21 +26,28 @@ jobs:
         with:
           node-version: 20
 
-      # خطوة سحرية: هتطبع لنا الملفات عشان لو فشل نعرف ليه
-      - name: List files (Debug)
-        run: ls -R
-
       - name: Install and Build
         run: |
-          if [ -d "centr2" ]; then
-            cd centr2
-            npm install
-            npm run build
-            echo "DEPLOY_PATH=centr2/dist" >> $GITHUB_ENV
-          else
-            npm install
-            npm run build
-            echo "DEPLOY_PATH=dist" >> $GITHUB_ENV
+          # 1. الدخول للمجلد لو موجود
+          if [ -d "centr2" ]; then cd centr2; fi
+          
+          # 2. تثبيت المكتبات الأساسية
+          npm install
+          
+          # 3. تثبيت المكتبة اللي ناقصة عندك (حل مؤقت وسريع)
+          npm install react-barcode
+          
+          # 4. بناء المشروع
+          npm run build
+          
+          # 5. تحديد مسار الرفع للمرحلة الجاية
+          if [ -d "dist" ]; then
+            # لو إحنا جوه centr2 فالمسار هيبقى centr2/dist بالنسبة للـ Root
+            if [[ "$PWD" == *"/centr2" ]]; then
+               echo "DEPLOY_PATH=centr2/dist" >> $GITHUB_ENV
+            else
+               echo "DEPLOY_PATH=dist" >> $GITHUB_ENV
+            fi
           fi
 
       - name: Upload artifact
