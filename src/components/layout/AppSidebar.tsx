@@ -54,7 +54,7 @@ export function AppSidebar() {
         </div>
         {!collapsed && (
           <div className="animate-fade-in">
-            <h1 className="font-bold text-lg text-sidebar-foreground">المدرس الذكي</h1>
+            <h1 className="font-bold text-lg text-sidebar-foreground">السنتر الذكي</h1>
             <p className="text-xs text-sidebar-foreground/60">نظام إدارة التعليم</p>
           </div>
         )}
