@@ -1,10 +1,6 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-
 export default defineConfig({
   plugins: [react()],
-  base: '/centr/',
+  base: '/centr2/', // لازم يكون نفس اسم الريبو بالظبط
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
