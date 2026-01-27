@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 // --- Lazy Pages ---
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Teachers = lazy(() => import("./pages/Teachers")); // ضفنا المدرسين هنا
 const Students = lazy(() => import("./pages/Students"));
 const Groups = lazy(() => import("./pages/Groups"));
 const Attendance = lazy(() => import("./pages/Attendance"));
@@ -37,10 +38,8 @@ const App = () => {
 
   const handleLogin = (e: any) => {
     e.preventDefault();
-
     const all = JSON.parse(localStorage.getItem('edu_users') || '[]');
 
-    // حساب الطوارئ (admin)
     if (all.length === 0 && form.n === "admin" && form.p === "admin") {
       const admin = { name: "المدير العام", user: "admin", password: "admin", role: "admin" };
       localStorage.setItem('edu_users', JSON.stringify([admin]));
@@ -51,7 +50,6 @@ const App = () => {
     }
 
     const foundUser = all.find((u: any) => u.user === form.n && u.password === form.p);
-
     if (foundUser) { 
       setUser(foundUser); 
       localStorage.setItem('current_edu_user', JSON.stringify(foundUser)); 
@@ -69,10 +67,8 @@ const App = () => {
         <div className="w-20 h-20 bg-primary rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-primary/30 animate-bounce">
           <GraduationCap className="text-white w-10 h-10" />
         </div>
-
         <h1 className="text-2xl text-slate-800 mb-2 font-black">نظام إدارة السنتر</h1>
         <p className="text-slate-400 text-xs mb-8 font-black">سجل دخولك لبدء العمل</p>
-        
         <form onSubmit={handleLogin} className="space-y-4">
           <input
             required
@@ -80,7 +76,6 @@ const App = () => {
             placeholder="اسم المستخدم"
             onChange={(e) => setForm({...form, n: e.target.value})}
           />
-
           <input
             type="password"
             required
@@ -88,7 +83,6 @@ const App = () => {
             placeholder="كلمة المرور"
             onChange={(e) => setForm({...form, p: e.target.value})}
           />
-
           <button className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black flex border-none cursor-pointer items-center justify-center gap-2 hover:bg-primary transition-all shadow-xl shadow-slate-200 mt-2">
             <Lock className="w-4 h-4" /> دخول النظام
           </button>
@@ -113,6 +107,7 @@ const App = () => {
             <Suspense fallback={<div className="h-screen flex items-center justify-center font-black text-slate-400">جاري التحميل...</div>}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/teachers" element={<Teachers />} /> {/* ضفنا الراوت هنا */}
                 <Route path="/students" element={<Students />} />
                 <Route path="/groups" element={<Groups />} />
                 <Route path="/attendance" element={<Attendance />} />
