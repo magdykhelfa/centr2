@@ -28,25 +28,27 @@ jobs:
 
       - name: Install and Build
         run: |
-          # تحديد المجلد
-          TARGET_DIR="."
-          if [ -d "centr2" ]; then TARGET_DIR="centr2"; fi
-          
-          cd $TARGET_DIR
-          npm install
-          npm install react-barcode # عشان المشكلة اللي فاتت
-          npm run build
-          
-          # بننقل الـ dist لمكان ثابت بره عشان الأكشن يشوفه بسهولة
-          cd ..
-          mkdir -p final_dist
-          cp -r $TARGET_DIR/dist/* final_dist/
+          # 1. تحديد مكان المشروع
+          if [ -d "centr2" ]; then
+            cd centr2
+            npm install
+            npm install react-barcode
+            npm run build
+            # نرجع لورا خطوة عشان نرفع من المسار الصح
+            cd ..
+            echo "FINAL_PATH=centr2/dist" >> $GITHUB_ENV
+          else
+            npm install
+            npm install react-barcode
+            npm run build
+            echo "FINAL_PATH=dist" >> $GITHUB_ENV
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # هنرفع من الفولدر الثابت اللي لسه عاملينه
-          path: final_dist
+          # الرفع مباشرة من مسار الـ dist اللي اتعمل
+          path: ${{ env.FINAL_PATH }}
 
   deploy:
     needs: build
