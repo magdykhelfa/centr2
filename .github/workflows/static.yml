@@ -27,28 +27,16 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        # بنقوله ادخل جوه centr2 ونفذ التثبيت
+        # جربنا نكتب اسم الفولدر مباشرة زي ما هو في الريبو
         run: npm install
-        working-directory: ./centr2 
+        working-directory: centr2 
 
       - name: Build project
-        # بنقوله ادخل جوه centr2 واعمل build
         run: npm run build
-        working-directory: ./centr2
+        working-directory: centr2
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # المسار المظبوط للفولدر اللي هيطلع فيه الموقع
-          path: ./centr2/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          # المسار اللي الـ Action هيشوفه بعد الـ build
+          path: centr2/dist
