@@ -15,10 +15,32 @@ interface Teacher {
   name: string;
   phone: string;
   subject: string;
+  stage: "primary" | "middle" | "high";
+  grade: number;
   contractType: "percentage" | "per-session" | "fixed";
-  rate: number;
   status: "active" | "inactive";
+  
 }
+
+const stageOptions = [
+  { value: "primary", label: "ابتدائي" },
+  { value: "middle", label: "إعدادي" },
+  { value: "high", label: "ثانوي" },
+];
+
+const getGradeLabel = (stage: string, grade: number) => {
+  const stageLabel = stageOptions.find(s => s.value === stage)?.label;
+  const ordinals = ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس"];
+  return `الصف ${ordinals[grade - 1]} ${stageLabel}`;
+};
+
+const getGradeOptions = (stage: string) => {
+  const length = stage === "primary" ? 6 : 3;
+  return Array.from({ length }, (_, i) => ({
+    value: i + 1,
+    label: getGradeLabel(stage, i + 1)
+  }));
+};
 
 export default function CenterTeachers() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,9 +54,20 @@ export default function CenterTeachers() {
     name: "",
     phone: "",
     subject: "",
+    stage: "primary" as Teacher["stage"],
+    grade: 1,
     contractType: "percentage" as Teacher["contractType"],
-    rate: 0
   });
+
+  const [gradeOptions, setGradeOptions] = useState(getGradeOptions(form.stage));
+
+  useEffect(() => {
+    setGradeOptions(getGradeOptions(form.stage));
+    // إعادة تعيين الصف إذا لم يكن متوافقاً
+    if (!gradeOptions.some(opt => opt.value === form.grade)) {
+      setForm(prev => ({ ...prev, grade: gradeOptions[0]?.value || 1 }));
+    }
+  }, [form.stage]);
 
   useEffect(() => {
     localStorage.setItem("teachers-data", JSON.stringify(teachers));
@@ -70,8 +103,9 @@ export default function CenterTeachers() {
       name: teacher.name,
       phone: teacher.phone,
       subject: teacher.subject,
+      stage: teacher.stage,
+      grade: teacher.grade,
       contractType: teacher.contractType,
-      rate: teacher.rate
     });
     setIsModalOpen(true);
   };
@@ -79,7 +113,7 @@ export default function CenterTeachers() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditId(null);
-    setForm({ name: "", phone: "", subject: "", contractType: "percentage", rate: 0 });
+    setForm({ name: "", phone: "", subject: "", stage: "primary", grade: 1, contractType: "percentage" });
   };
 
   const deleteTeacher = (id: string) => {
@@ -93,7 +127,7 @@ export default function CenterTeachers() {
       <div className="flex items-center justify-between bg-white p-6 rounded-2xl shadow-sm border">
         <div>
           <h1 className="text-2xl font-black text-slate-800">إدارة المدرسين والعقود</h1>
-          <p className="text-muted-foreground font-bold text-sm">حدد طريقة الحساب (نسبة، حصة، أو راتب)</p>
+          <p className="text-muted-foreground font-bold text-sm">حدد نوع التعاقد (نسبة، حصة، أو راتب)</p>
         </div>
 
         <Dialog open={isModalOpen} onOpenChange={(open) => { if(!open) closeModal(); else setIsModalOpen(true); }}>
@@ -123,29 +157,40 @@ export default function CenterTeachers() {
                   <Input value={form.subject} onChange={(e) => setForm({...form, subject: e.target.value})} placeholder="المادة" className="font-bold text-right" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 border-t pt-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5 text-right">
-                  <Label className="font-bold">نوع التعاقد</Label>
-                  <Select value={form.contractType} onValueChange={(v: any) => setForm({...form, contractType: v})}>
+                  <Label className="font-bold">المرحلة</Label>
+                  <Select value={form.stage} onValueChange={(v: any) => setForm({...form, stage: v})}>
                     <SelectTrigger className="font-bold text-right"><SelectValue /></SelectTrigger>
                     <SelectContent className="text-right font-bold">
+                      {stageOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <Label className="font-bold">الصف</Label>
+                  <Select value={form.grade.toString()} onValueChange={(v: any) => setForm({...form, grade: Number(v)})}>
+                    <SelectTrigger className="font-bold text-right"><SelectValue /></SelectTrigger>
+                    <SelectContent className="text-right font-bold">
+                      {gradeOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value.toString()}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5 text-right">
+                <Label className="font-bold">نوع التعاقد</Label>
+                <Select value={form.contractType} onValueChange={(v: any) => setForm({...form, contractType: v})}>
+                  <SelectTrigger className="font-bold text-right"><SelectValue /></SelectTrigger>
+                  <SelectContent className="text-right font-bold">
                     <SelectItem value="percentage">نسبة من تحصيل الطلاب (%)</SelectItem>
                     <SelectItem value="per-session">أجر ثابت عن الحصة الواحدة</SelectItem>
                     <SelectItem value="fixed">راتب شهري ثابت</SelectItem>
                   </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5 text-right">
-                  <Label className="font-bold">القيمة (بالنسبة أو الجنيه)</Label>
-                  <Input 
-                    type="number" 
-                    value={form.rate} 
-                    disabled={form.contractType === 'fixed'}
-                    onChange={(e) => setForm({...form, rate: Number(e.target.value)})} 
-                    className={cn("font-black text-right", form.contractType === 'fixed' && "bg-slate-100 opacity-50")} 
-                  />
-                  {form.contractType === 'fixed' && <p className="text-[10px] text-red-500 font-bold">الراتب الثابت يتم صرفه يدوياً من المالية</p>}
-                </div>
+                </Select>
               </div>
               <Button onClick={handleSaveTeacher} className="w-full font-black text-lg py-6 mt-2 bg-blue-600 hover:bg-blue-700">
                 {editId ? "حفظ التعديلات" : "تأكيد الإضافة"}
@@ -160,9 +205,12 @@ export default function CenterTeachers() {
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
-                <TableHead className="text-right font-black">المدرس والمادة</TableHead>
-                <TableHead className="text-right font-black">طريقة المحاسبة</TableHead>
-                <TableHead className="text-right font-black">القيمة</TableHead>
+                <TableHead className="text-right font-black">اسم المدرس</TableHead>
+                <TableHead className="text-right font-black">رقم الهاتف</TableHead>
+                <TableHead className="text-right font-black">المادة</TableHead>
+                <TableHead className="text-right font-black">المرحلة</TableHead>
+                <TableHead className="text-right font-black">الصف</TableHead>
+                <TableHead className="text-right font-black">نوع التعاقد</TableHead>
                 <TableHead className="text-right font-black">الحالة</TableHead>
                 <TableHead className="text-left font-black">إجراءات</TableHead>
               </TableRow>
@@ -171,20 +219,24 @@ export default function CenterTeachers() {
               {teachers.map((teacher) => (
                 <TableRow key={teacher.id} className="hover:bg-slate-50/50 transition-colors">
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-black text-slate-800">{teacher.name}</span>
-                      <span className="text-xs font-bold text-blue-600">{teacher.subject}</span>
-                    </div>
+                    <span className="font-black text-slate-800">{teacher.name}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-bold text-slate-700">{teacher.phone}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-bold text-slate-700">{teacher.subject}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-bold text-slate-700">{stageOptions.find(s => s.value === teacher.stage)?.label}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-bold text-slate-700">{getGradeLabel(teacher.stage, teacher.grade)}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-bold">
                       {teacher.contractType === "percentage" ? "نسبة" : teacher.contractType === "per-session" ? "بالحصة" : "راتب شهري"}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-black text-sm text-emerald-600">
-                      {teacher.contractType === 'fixed' ? "---" : `${teacher.rate}${teacher.contractType === "percentage" ? "%" : " ج"}`}
-                    </span>
                   </TableCell>
                   <TableCell>
                     <Badge className={cn("font-bold text-[10px]", teacher.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600")}>

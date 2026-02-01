@@ -1,129 +1,295 @@
-import { useEffect, useState } from "react";
-import { UserCheck, Phone, Users, MessageCircle, Clock, Trophy, Star } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { 
+  Users, 
+  MessageCircle, 
+  Search, 
+  Phone, 
+  TrendingUp, 
+  AlertCircle, 
+  CheckCircle2, 
+  XCircle,
+  Clock,
+  BookOpen,
+  DollarSign
+} from "lucide-react";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 
 export default function Parents() {
+  const location = useLocation();
   const [parents, setParents] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // حالات الفلترة المتتالية
+  const [selectedTeacher, setSelectedTeacher] = useState("");
+  const [selectedStage, setSelectedStage] = useState("");
+  const [selectedClass, setSelectedClass] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState("");
+
+  // 1. تحميل البيانات الأساسية والاختيار التلقائي
+  useEffect(() => {
+    const t = JSON.parse(localStorage.getItem("teachers-data") || "[]");
+    const g = JSON.parse(localStorage.getItem("groups-data") || "[]");
+    setTeachers(t);
+    setGroups(g);
+
+    // لو جاي من صفحة المجموعات (Redirect)
+    if (location.state?.selectedGroup) {
+      const groupName = location.state.selectedGroup;
+      const groupFound = g.find((gr: any) => gr.name === groupName);
+      if (groupFound) {
+        setSelectedTeacher(groupFound.teacherName || "");
+        setSelectedStage(groupFound.stage || "");
+        setSelectedClass(groupFound.grade?.toString() || "");
+        setSelectedGroup(groupName);
+      }
+    }
+  }, [location.state]);
+
+  // 2. معالجة بيانات أولياء الأمور (المنطق الخاص بك)
   useEffect(() => {
     try {
       const students = JSON.parse(localStorage.getItem("students-data") || "[]");
       const attendanceData = JSON.parse(localStorage.getItem("attendance-data") || "{}");
       const exams = JSON.parse(localStorage.getItem("exams-data") || "[]");
       const transactions = JSON.parse(localStorage.getItem("finance-transactions") || "[]");
-      const groups = JSON.parse(localStorage.getItem("groups-data") || "[]"); // إضافة لجلب بيانات المجموعات
-      const savedSettings = JSON.parse(localStorage.getItem("app-settings") || "{}");
-      setSettings(savedSettings);
 
       const parentsMap = new Map();
 
       students.forEach((student: any) => {
+        if (!student) return;
+        
+        // تصفية الطلاب بناءً على المجموعة المختارة (هنا بيتطبق الفلتر الجديد)
+        if (selectedGroup && !student.enrolledGroups?.includes(selectedGroup)) return;
+
         const pPhone = student.parentPhone || "000";
         if (!parentsMap.has(pPhone)) {
-          parentsMap.set(pPhone, { name: student.parentName, phone: pPhone, students: [] });
+          parentsMap.set(pPhone, { 
+            name: student.parentName || "غير مسجل", 
+            phone: pPhone, 
+            students: [] 
+          });
         }
 
-        // 1. ربط الحضور
-        const groupAtt = attendanceData[student.group] || {};
+        const groupAtt = attendanceData[selectedGroup] || {};
         const attRec = groupAtt[student.id];
 
-        // 2. ربط الامتحانات
         const studentExams = exams
-          .filter((e: any) => e.group === student.group && e.grades && e.grades[student.id] !== undefined)
-          .sort((a: any, b: any) => b.id - a.id);
+          .filter((e: any) => (e?.group === selectedGroup) && e?.grades && e.grades[student.id] !== undefined)
+          .sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
         
         const lastExam = studentExams[0];
         const studentGrade = lastExam ? lastExam.grades[student.id] : null;
-        const isTop = lastExam && Number(studentGrade) >= Number(lastExam.totalMarks);
 
-        // 3. المالية (تعديل ليشمل ديون الباكدجات والديون العادية)
         const debt = transactions
-          .filter((t: any) => (t.student === student.name || t.studentId === student.id) && t.status === "partial")
+          .filter((t: any) => (t.studentId === student.id) && t.status === "partial")
           .reduce((acc: number, t: any) => acc + (Number(t.amount) || 0), 0);
-
-        // 4. جلب اسم مدرس المجموعة (إضافة جديدة للتقرير)
-        const groupInfo = groups.find((g: any) => g.name === student.group);
-        const teacherName = groupInfo ? groupInfo.teacherName : "";
 
         parentsMap.get(pPhone).students.push({
           id: student.id,
           name: student.name,
-          group: student.group,
-          teacherName: teacherName, // إضافة لبيانات الطالب
           status: attRec ? "حاضر" : "غائب",
-          time: attRec ? attRec.time : "",
-          lastExamSubject: lastExam ? lastExam.subject : "لا يوجد",
+          time: attRec?.time || "",
+          lastExamSubject: lastExam?.subject || "لا يوجد",
           score: studentGrade !== null ? studentGrade : "--",
-          total: lastExam ? lastExam.totalMarks : "--",
-          isTop: isTop,
+          total: lastExam?.totalMarks || "--",
           debt: debt
         });
       });
 
       setParents(Array.from(parentsMap.values()));
-    } catch (e) { console.error("Error Linking Pages:", e); }
-  }, []);
+    } catch (e) { 
+      console.error("Error Linking:", e); 
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedGroup]); // التحديث يحصل لما المجموعة تتغير
 
-  const sendReport = (parent: any) => {
-    const teacherHeader = settings.centerName ? `*${settings.centerName}*` : (settings.teacherName ? `*أ/ ${settings.teacherName}*` : `*تقرير المتابعة*`);
-    let msg = `--------------------------\n🏛️ ${teacherHeader}\n--------------------------\n*ولي الأمر:* ${parent.name}\n\n`;
-
-    parent.students.forEach((s: any, i: number) => {
-      msg += `*الطالب:* ${s.name}\n`;
-      msg += `*المجموعة:* ${s.group} ${s.teacherName ? `(أ/ ${s.teacherName})` : ""}\n`; // إضافة المدرس للرسالة
-      msg += `*الحضور:* ${s.status === "حاضر" ? `✅ حاضر (${s.time})` : "❌ غائب"}\n`;
-      msg += `*الامتحان:* ${s.lastExamSubject} (${s.score}/${s.total}) ${s.isTop ? "🏆 (متفوق)" : ""}\n`;
-      msg += `*المالية:* ${s.debt > 0 ? s.debt + " ج.م (برجاء السداد)" : "خالص ✅"}\n`;
-      if (i < parent.students.length - 1) msg += `- - - - - - - - - - - - - -\n`;
-    });
-
-    msg += `\n*شكراً لمتابعتكم لنا*`;
-    window.open(`https://wa.me/2${parent.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  // 3. دوال مساعدة للفلترة
+  const getStageLabel = (stage: string) => {
+    const labels: any = { primary: "ابتدائي", middle: "إعدادي", high: "ثانوي" };
+    return labels[stage] || stage;
   };
 
+  const selectedTeacherData = teachers.find(t => t.name === selectedTeacher);
+  const stageOptions = selectedTeacherData ? [{ value: selectedTeacherData.stage, label: getStageLabel(selectedTeacherData.stage) }] : [];
+  const classOptions = selectedTeacherData ? [{ value: selectedTeacherData.grade?.toString(), label: `الصف ${selectedTeacherData.grade} ${getStageLabel(selectedTeacherData.stage)}` }] : [];
+  const availableGroups = selectedClass ? groups.filter(g => g.teacherName === selectedTeacher && g.stage === selectedStage && g.grade?.toString() === selectedClass) : [];
+
+  // تصفية نهائية للبحث بالاسم داخل النتائج
+  const finalDisplay = parents.filter(p => 
+    p.name.includes(searchTerm) || p.phone.includes(searchTerm) || p.students.some((s:any) => s.name.includes(searchTerm))
+  );
+  
+  // 🟢 دالة إرسال تقرير الواتساب التي قمت بإضافتها لك
+  const sendWhatsAppReport = (parent: any) => {
+    const date = new Date().toLocaleDateString("ar-EG");
+    let message = `*تقرير متابعة الطالب - بتاريخ ${date}*\n\n`;
+    message += `إلى ولي الأمر الفاضل: *${parent.name}*\n`;
+    message += `--------------------------\n`;
+
+    parent.students.forEach((st: any, index: number) => {
+      message += `*${index + 1}- الطالب: ${st.name}*\n`;
+      message += `• حالة الحضور: ${st.status} ${st.time ? `(الساعة ${st.time})` : ""}\n`;
+      message += `• آخر درجة: ${st.score} / ${st.total} (${st.lastExamSubject})\n`;
+      message += `• الديون المتبقية: ${st.debt} ج.م\n`;
+      message += `--------------------------\n`;
+    });
+
+    message += `\n*نرجو الاهتمام والمتابعة.. مع تحياتنا.*`;
+
+    // تنسيق الرقم (إضافة كود مصر 2 إذا بدأ الرقم بـ 0)
+    const cleanPhone = parent.phone.startsWith('0') ? '2' + parent.phone : parent.phone;
+    const whatsappUrl = `https://wa.me/${cleanPhone.replace(/\s+/g, '')}?text=${encodeURIComponent(message)}`;
+    
+    window.open(whatsappUrl, "_blank");
+  };
+  
   return (
-    <div className="space-y-6 text-right" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-black text-secondary">أولياء الأمور</h1><p className="text-muted-foreground text-xs font-bold">ربط تلقائي مع الحضور والامتحانات والمالية</p></div>
-        <Badge className="bg-secondary text-white font-black px-4 py-1 rounded-xl">عدد أولياء الأمور: {parents.length}</Badge>
+  
+    <div className="space-y-4 p-2">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-black">شاشة أولياء الأمور</h1>
+        <p className="text-muted-foreground text-sm font-bold">متابعة الأداء الأكاديمي والمالي</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {parents.map((p, idx) => (
-          <Card key={idx} className="border-none shadow-2xl rounded-[2rem] overflow-hidden group">
-            <CardHeader className="bg-secondary/5 pb-4 border-b border-dashed border-secondary/20">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-secondary flex items-center justify-center text-white shadow-lg"><UserCheck className="w-7 h-7" /></div>
-                <div><CardTitle className="text-xl font-black">{p.name}</CardTitle><p className="text-sm font-bold text-muted-foreground font-mono">{p.phone}</p></div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-4 font-egyptian">
-              {p.students.map((s: any, sIdx: number) => (
-                <div key={sIdx} className="p-4 rounded-2xl bg-muted/30 border border-muted space-y-3 relative overflow-hidden">
-                  {s.isTop && <div className="absolute -left-2 -top-2 bg-amber-400 text-white p-2 rounded-br-2xl shadow-lg animate-bounce"><Trophy className="w-4 h-4" /></div>}
-                  <div className="flex justify-between items-center">
-                    <span className="font-black text-secondary">{s.name}</span>
-                    <Badge className={s.status === "حاضر" ? "bg-green-500 text-white" : "bg-red-500 text-white"}>{s.status}</Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-[11px] font-bold text-muted-foreground">
-                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" /> {s.time || "--:--"}</div>
-                    <div className={`flex items-center gap-1 ${s.isTop ? 'text-amber-600 font-black' : 'text-primary'}`}>
-                       <Star className="w-3 h-3" /> {s.lastExamSubject}: {s.score}/{s.total}
-                    </div>
-                  </div>
-                  {s.debt > 0 && <div className="text-[10px] font-black text-orange-600 bg-orange-50 p-1 rounded-lg text-center border border-orange-100">مطلوب مالياً: {s.debt} ج.م</div>}
-                </div>
-              ))}
-              <Button className="w-full h-12 gap-2 font-black bg-secondary hover:bg-secondary/90 shadow-lg rounded-2xl" onClick={() => sendReport(p)}>
-                <MessageCircle className="w-5 h-5" /> إرسال تقرير الواتساب
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+      {/* قسم الفلترة الجديد - مطابق لصفحة الحضور */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl shadow-sm border">
+        <div>
+          <Label className="font-black mb-1 block text-xs">المدرس</Label>
+          <Select value={selectedTeacher} onValueChange={(value) => {
+            setSelectedTeacher(value);
+            const t = teachers.find(teach => teach.name === value);
+            setSelectedStage(t?.stage || "");
+            setSelectedClass(t?.grade?.toString() || "");
+            setSelectedGroup("");
+          }}>
+            <SelectTrigger className="font-bold h-10"><SelectValue placeholder="اختر المدرس" /></SelectTrigger>
+            <SelectContent>
+              {teachers.map(t => <SelectItem key={t.id} value={t.name} className="font-bold">{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="font-black mb-1 block text-xs">المرحلة</Label>
+          <Select value={selectedStage} disabled={!selectedTeacher}>
+            <SelectTrigger className="font-bold h-10"><SelectValue placeholder="المرحلة" /></SelectTrigger>
+            <SelectContent>
+              {stageOptions.map(s => <SelectItem key={s.value} value={s.value} className="font-bold">{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="font-black mb-1 block text-xs">الصف</Label>
+          <Select value={selectedClass} disabled={!selectedStage}>
+            <SelectTrigger className="font-bold h-10"><SelectValue placeholder="الصف" /></SelectTrigger>
+            <SelectContent>
+              {classOptions.map(c => <SelectItem key={c.value} value={c.value} className="font-bold">{c.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="font-black mb-1 block text-xs text-blue-600">المجموعة الدراسية</Label>
+          <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={!selectedClass}>
+            <SelectTrigger className="font-bold h-10 border-blue-200 bg-blue-50 text-blue-700"><SelectValue placeholder="اختر المجموعة" /></SelectTrigger>
+            <SelectContent>
+              {availableGroups.map(g => <SelectItem key={g.id} value={g.name} className="font-bold">{g.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {/* مربع بحث بالاسم إضافي */}
+      <div className="relative">
+        <Search className="absolute right-3 top-3 w-4 h-4 text-muted-foreground" />
+        <Input 
+          placeholder="بحث باسم ولي الأمر أو الطالب..." 
+          className="pr-10 font-bold"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* عرض البيانات */}
+      {!selectedGroup ? (
+        <div className="text-center p-10 bg-slate-50 rounded-2xl border-2 border-dashed">
+          <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+          <p className="font-black text-slate-500">برجاء اختيار المجموعة الدراسية أولاً لعرض البيانات</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  {finalDisplay.map((parent, idx) => (
+    <Card key={idx} className="overflow-hidden border-none shadow-lg">
+      <CardHeader className="bg-slate-900 text-white p-4">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg font-black">{parent.name}</CardTitle>
+          {/* تم تعديل الزر هنا ليعمل فعلياً ويرسل الرسالة */}
+          <Button 
+            size="sm" 
+            variant="secondary" 
+            className="gap-2 font-black h-8 bg-green-600 hover:bg-green-700 text-white border-none"
+            onClick={() => sendWhatsAppReport(parent)}
+          >
+            <MessageCircle className="w-4 h-4" /> واتساب
+          </Button>
+        </div>
+        <div className="flex items-center gap-2 text-slate-300 text-xs mt-1 font-bold">
+          <Phone className="w-3 h-3" /> {parent.phone}
+        </div>
+      </CardHeader>
+      
+      <CardContent className="p-4 space-y-4">
+        {parent.students.map((st: any) => (
+          <div key={st.id} className="border-b last:border-0 pb-3 last:pb-0">
+            <div className="flex justify-between items-start mb-2">
+              <p className="font-black text-blue-700">{st.name}</p>
+              <Badge className={st.status === "حاضر" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700 border-none"}>
+                {st.status === "حاضر" ? <CheckCircle2 className="w-3 h-3 ml-1" /> : <XCircle className="w-3 h-3 ml-1" />}
+                {st.status} {st.time && `(${st.time})`}
+              </Badge>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="bg-slate-50 p-2 rounded-lg border">
+                <div className="flex items-center gap-1 text-[10px] font-black text-muted-foreground mb-1 uppercase">
+                  <BookOpen className="w-3 h-3" /> آخر امتحان
+                </div>
+                <p className="text-sm font-black">{st.lastExamSubject}</p>
+                <p className="text-lg font-black text-purple-600">{st.score} <span className="text-[10px] text-slate-400">/ {st.total}</span></p>
+              </div>
+              
+              <div className="bg-red-50 p-2 rounded-lg border border-red-100 text-right">
+                <div className="flex items-center justify-end gap-1 text-[10px] font-black text-red-400 mb-1 uppercase">
+                  المستحقات <DollarSign className="w-3 h-3" />
+                </div>
+                <p className="text-lg font-black text-red-600">{st.debt} ج.م</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  ))}
+</div>
+      )}
     </div>
   );
 }

@@ -1,137 +1,317 @@
-import { useEffect, useState } from "react";
-import { Wallet, TrendingUp, TrendingDown, CreditCard, Plus, Edit, Trash2, Users, Calendar, Search } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { Plus, Edit, Calculator, Users, Wallet, Trash2, AlertCircle, UserCheck, Receipt, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch"; 
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from 'sonner';
+import { Badge } from "@/components/ui/badge";
 
-type Transaction = { 
-  id: number; type: "income" | "expense" | "teacher_payment"; 
-  amount: number; date: string; status: "completed" | "partial"; 
-  student?: string; teacherName?: string; description?: string; 
-  groupId?: string; teacherShare?: number; 
-};
+const FINANCE_KEY = "finance-transactions";
+const STUDENTS_KEY = "students-data";
+const TEACHERS_KEY = "teachers-data";
 
 export default function Finance() {
-  const [allStudents] = useState(() => JSON.parse(localStorage.getItem("students-data") || "[]"));
-  const [groups] = useState(() => JSON.parse(localStorage.getItem("groups-data") || "[]"));
-  const [teachers] = useState(() => JSON.parse(localStorage.getItem("teachers-data") || "[]"));
-  const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem("finance-transactions") || "[]"));
-  
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
-  const [form, setForm] = useState<Omit<Transaction, "id">>({ 
-    type: "income", amount: 0, date: new Date().toISOString().split('T')[0], 
-    status: "completed", student: "", teacherName: "", description: "", groupId: "", teacherShare: 0 
+  // --- States ---
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isStudentSettingsOpen, setIsStudentSettingsOpen] = useState(false);
+  const [isTeacherFinanceOpen, setIsTeacherFinanceOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [viewDate, setViewDate] = useState({ 
+    month: new Date().getMonth() + 1, 
+    year: new Date().getFullYear() 
+  });
+  // Student Form State
+  const [studentForm, setStudentForm] = useState({
+    id: '', name: '', subscriptionType: 'per_lesson', packagePrice: 0,
+    discountPercentage: 0, selectedSubjects: [] as any[], 
+    isPackageFree: false, lastUpdateDate: '', notes: '', manualDebt: 0 
   });
 
-  useEffect(() => { localStorage.setItem("finance-transactions", JSON.stringify(transactions)); }, [transactions]);
+  // Teacher Form State
+  const [teacherFinForm, setTeacherFinForm] = useState({
+    id: '', name: '', salaryType: 'fixed', fixedSalary: 0, 
+    pricePerLesson: 0, lessonsCount: 0, percentage: 0, notes: ''
+  });
 
-  const handleSave = () => {
-  let finalForm = { ...form };
-  
-  if (form.type === "teacher_payment") {
-    // لو المدرس "ليه" فلوس (إثبات حصة)
-    if (form.description === "is_session") {
-      finalForm.teacherShare = Number(form.amount);
-      finalForm.amount = 0; // الخزنة لا تتأثر
-      finalForm.description = "إثبات استحقاق حصة";
-    } 
-    // لو المدرس "صرف" فلوس (دفع نقدي)
-    else if (form.description === "is_payment") {
-      finalForm.teacherShare = 0;
-      finalForm.amount = Number(form.amount); // يخصم من الخزنة
-      finalForm.description = "صرف نقدي للمدرس";
+  // General Transaction Form State
+  const [form, setForm] = useState({ 
+    type: 'income', amount: 0, description: '', 
+    date: new Date().toISOString().split('T')[0], student: '', category: 'general' 
+  });
+
+  // --- Load Data ---
+  useEffect(() => {
+    const loadData = () => {
+      setTransactions(JSON.parse(localStorage.getItem(FINANCE_KEY) || "[]"));
+      setStudents(JSON.parse(localStorage.getItem(STUDENTS_KEY) || "[]"));
+      setTeachers(JSON.parse(localStorage.getItem(TEACHERS_KEY) || "[]"));
+    };
+    loadData();
+  }, []);
+
+  const saveData = (newTransactions: any[], newStudents?: any[]) => {
+    setTransactions(newTransactions);
+    localStorage.setItem(FINANCE_KEY, JSON.stringify(newTransactions));
+    if (newStudents) {
+      setStudents(newStudents);
+      localStorage.setItem(STUDENTS_KEY, JSON.stringify(newStudents));
     }
-  }
-  // ... باقي كود الدفع للطلاب كما هو
-  setTransactions((prev) => [...prev, { ...finalForm, id: Date.now() } as Transaction]);
-  setOpenDialog(false);
-  setForm({ type: "income", amount: 0, date: new Date().toISOString().split('T')[0], status: "completed", student: "", teacherName: "", description: "", groupId: "", teacherShare: 0 });
-};
+  };
 
-        const filterStudentsByGroup = (groupId: string) => {
-          const groupName = groups.find((g: any) => String(g.id) === groupId)?.name;
+  // --- Calculations ---
+  const calculateStudentRequired = (s: any) => {
+    if (!s || s.isPackageFree) return 0;
+    if (s.subscriptionType === 'per_lesson') {
+      return (s.selectedSubjects || []).reduce((total: number, sub: any) => 
+        total + ((sub.lessonPrice || 0) * (sub.lessonsCount || 0)), 0);
+    }
+    if (s.subscriptionType === 'full_package') return (s.packagePrice || 0);
+    if (s.subscriptionType === 'discounted_package') {
+      const price = s.packagePrice || 0;
+      return price - (price * (s.discountPercentage || 0) / 100);
+    }
+    return 0;
+  };
 
-          const res = allStudents.filter((s: any) =>
-            s.enrolledGroups?.includes(groupName)
-          );
+  const calculateTeacherDues = (t: any) => {
+    if (t.salaryType === 'fixed') return t.fixedSalary || 0;
+    if (t.salaryType === 'per_lesson') return (t.pricePerLesson || 0) * (t.lessonsCount || 0);
+    if (t.salaryType === 'percentage') {
+      const total = (t.pricePerLesson || 0) * (t.lessonsCount || 0);
+      return (total * (t.percentage || 0)) / 100;
+    }
+    return 0;
+  };
 
-          setFilteredStudents(res);
-        };
+  // --- Handlers ---
+  const handleSaveTransaction = () => {
+    let updated;
+    if (editingTransaction) {
+      updated = transactions.map(t => t.id === editingTransaction.id ? { ...form, id: t.id } : t);
+      toast.success('تم تعديل العملية');
+    } else {
+      updated = [...transactions, { ...form, id: Date.now() }];
+      toast.success('تم إضافة العملية للخزينة');
+    }
+    saveData(updated);
+    setIsDialogOpen(false);
+  };
 
+  const handleDeleteTransaction = (id: number) => {
+    // 1. العثور على العملية قبل حذفها لمعرفة هل هي تابعة لطالب أم لا
+    const transactionToDelete = transactions.find(t => t.id === id);
+    
+    // 2. حذف العملية من القائمة
+    const updatedTx = transactions.filter(t => t.id !== id);
+    
+    // 3. إذا كانت العملية مرتبطة بطالب، نقوم بتحديث بيانات الطالب (اختياري لضمان تحديث الـ UI)
+    let updatedStudents = [...students];
+    if (transactionToDelete && transactionToDelete.student) {
+      updatedStudents = students.map(s => 
+        s.id.toString() === transactionToDelete.student 
+        ? { ...s, lastUpdateDate: new Date().toISOString().split('T')[0] } 
+        : s
+      );
+      toast.info(`تم حذف العملية وتحديث حساب الطالب: ${transactionToDelete.description.split(': ')[1] || ''}`);
+    } else {
+      toast.error('تم حذف العملية من الخزينة');
+    }
 
-  const totalIncome = transactions.filter(t => t.type === "income").reduce((a, b) => a + b.amount, 0);
-  const totalExpenses = transactions.filter(t => t.type !== "income").reduce((a, b) => a + b.amount, 0);
+    // 4. حفظ البيانات الجديدة
+    setTransactions(updatedTx);
+    localStorage.setItem(FINANCE_KEY, JSON.stringify(updatedTx));
+    
+    if (transactionToDelete && transactionToDelete.student) {
+      setStudents(updatedStudents);
+      localStorage.setItem(STUDENTS_KEY, JSON.stringify(updatedStudents));
+    }
+  };
 
+  const handleSaveStudentFinance = () => {
+    if (!studentForm.id) return toast.error('يرجى اختيار طالب أولاً');
+    const required = calculateStudentRequired(studentForm);
+    const paidAmount = required - (studentForm.manualDebt || 0);
+
+    let updatedTx = [...transactions];
+    if (paidAmount > 0) {
+      updatedTx.push({
+        id: Date.now(), type: 'income', amount: paidAmount,
+        description: `سداد اشتراك - طالب: ${studentForm.name}`,
+        date: currentDate, student: studentForm.id, category: 'درس'
+      });
+    }
+
+    const updatedSt = students.map(s => 
+      s.id.toString() === studentForm.id ? { ...s, ...studentForm, lastUpdateDate: currentDate } : s
+    );
+    
+    saveData(updatedTx, updatedSt);
+    setIsStudentSettingsOpen(false);
+    toast.success('تم تحصيل المبلغ وتحديث الحساب');
+  };
+
+  const handleSaveTeacherPayment = () => {
+    if (!teacherFinForm.id) return toast.error('يرجى اختيار مدرس');
+    const amount = calculateTeacherDues(teacherFinForm);
+    if (amount <= 0) return toast.error('المبلغ المستحق صفر');
+
+    const newTx = {
+      id: Date.now(), type: 'expense', amount,
+      description: `صرف مستحقات مدرس: ${teacherFinForm.name} (${teacherFinForm.notes || 'بدون ملاحظات'})`,
+      date: currentDate, category: 'رواتب'
+    };
+    
+    saveData([...transactions, newTx]);
+    setIsTeacherFinanceOpen(false);
+    toast.success(`تم صرف ${amount} ج للمدرس`);
+  };
+
+  const handleSubjectToggle = (teacher: any) => {
+    const isSelected = studentForm.selectedSubjects.some(sub => sub.teacherId === teacher.id);
+    setStudentForm({
+      ...studentForm,
+      selectedSubjects: isSelected 
+        ? studentForm.selectedSubjects.filter(sub => sub.teacherId !== teacher.id)
+        : [...studentForm.selectedSubjects, { 
+            teacherId: teacher.id, 
+            subjectName: teacher.subject, 
+            lessonPrice: teacher.lessonPrice || 0, 
+            lessonsCount: teacher.lessonsPerMonth || 4 
+          }]
+    });
+  };
+
+  // 1. دي "المصفاة" اللي بتجيب حركات الشهر المختار بس
+const filteredTransactions = transactions.filter(t => {
+  const tDate = new Date(t.date);
+  return (tDate.getMonth() + 1) === viewDate.month && tDate.getFullYear() === viewDate.year;
+});
+
+// 2. هنا بنحسب الإجمالي من الحركات المصفاة (مش من كل الحركات)
+const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   return (
-    <div className="space-y-6 p-4" dir="rtl text-right">
-      {/* Header */}
-      <div className="flex flex-row-reverse items-center justify-between bg-white p-6 rounded-2xl shadow-sm border">
-        <Button size="lg" className="font-black gap-2 bg-blue-600 hover:bg-blue-700 shadow-lg" onClick={() => { setForm({type: "income", amount: 0, date: new Date().toISOString().split('T')[0], status: "completed", student: "", teacherName: "", description: "", groupId: "", teacherShare: 0}); setOpenDialog(true); }}>
-          <Plus className="w-5 h-5" /> تسجيل معاملة جديدة
-        </Button>
+    <div className="p-6 space-y-6" dir="rtl">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-slate-100 gap-4">
         <div className="text-right">
-          <h1 className="text-3xl font-black text-slate-800">الإدارة المالية</h1>
-          <p className="text-muted-foreground font-bold">تنظيم الحسابات والمستحقات</p>
+          <h1 className="text-2xl font-black text-slate-800">الإدارة المالية المركزية</h1>
+          <p className="text-muted-foreground font-bold text-xs uppercase opacity-70">التحصيل، الرواتب، وحركة الخزينة</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {/* زراير اختيار الشهر والسنة */}
+<div className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-dashed border-slate-300">
+  <select 
+    className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold text-blue-600 outline-none"
+    value={viewDate.month} 
+    onChange={(e) => setViewDate({...viewDate, month: Number(e.target.value)})}
+  >
+    {[...Array(12)].map((_, i) => (
+      <option key={i+1} value={i+1}>شهر {i+1}</option>
+    ))}
+  </select>
+
+  <select 
+    className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold text-slate-600 outline-none"
+    value={viewDate.year} 
+    onChange={(e) => setViewDate({...viewDate, year: Number(e.target.value)})}
+  >
+    {[2025, 2026, 2027].map(y => (
+      <option key={y} value={y}>{y}</option>
+    ))}
+  </select>
+</div>
+          <Button variant="outline" className="gap-2 font-black border-orange-600 text-orange-600 hover:bg-orange-50" onClick={() => setIsTeacherFinanceOpen(true)}>
+            <Wallet className="w-4 h-4" /> حساب مدرس
+          </Button>
+          <Button variant="outline" className="gap-2 font-black border-blue-600 text-blue-600 hover:bg-blue-50" onClick={() => setIsStudentSettingsOpen(true)}>
+            <Users className="w-4 h-4" /> تحصيل طالب
+          </Button>
+          <Button className="gap-2 font-black bg-slate-900 shadow-lg" onClick={() => {setEditingTransaction(null); setForm({ type: 'income', amount: 0, description: '', date: currentDate, student: '', category: 'general' }); setIsDialogOpen(true);}}>
+            <Plus className="w-4 h-4" /> حركة خزينة
+          </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="إجمالي الدخل" value={totalIncome} icon={<TrendingUp />} color="text-emerald-600" bg="bg-emerald-50" />
-        <StatCard title="المصروفات" value={totalExpenses} icon={<TrendingDown />} color="text-red-600" bg="bg-red-50" />
-        <StatCard title="صافي الربح" value={totalIncome - totalExpenses} icon={<Wallet />} color="text-blue-600" bg="bg-blue-50" />
-        <StatCard title="تحصيل معلق" value={transactions.filter(t=>t.status==='partial').reduce((a,b)=>a+b.amount,0)} icon={<CreditCard />} color="text-amber-600" bg="bg-amber-50" />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <SummaryCard value={totalIncome} label="إجمالي المقبوضات" type="income" icon={<ArrowUpCircle className="w-5 h-5" />} />
+        <SummaryCard value={totalExpenses} label="إجمالي المصروفات" type="expense" icon={<ArrowDownCircle className="w-5 h-5" />} />
+        <SummaryCard value={totalIncome - totalExpenses} label="صافي الخزينة" type="profit" icon={<Receipt className="w-5 h-5" />} />
       </div>
 
-      <Tabs defaultValue="students_report" className="w-full">
-        <TabsList className="flex flex-row-reverse w-full h-14 bg-slate-100 rounded-xl p-1 font-black shadow-inner">
-          <TabsTrigger value="students_report" className="flex-1 rounded-lg">كشف الطلاب</TabsTrigger>
-          <TabsTrigger value="teachers_report" className="flex-1 rounded-lg">كشف المدرسين</TabsTrigger>
-          <TabsTrigger value="pending" className="flex-1 rounded-lg">المتأخرات</TabsTrigger>
-          <TabsTrigger value="history" className="flex-1 rounded-lg">سجل الخزينة</TabsTrigger>
+      {/* Main Tabs */}
+      <Tabs defaultValue="students" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-xl">
+          <TabsTrigger value="students" className="font-bold">حسابات الطلاب</TabsTrigger>
+          <TabsTrigger value="teachers" className="font-bold">حسابات المدرسين</TabsTrigger>
+          <TabsTrigger value="transactions" className="font-bold">سجل العمليات</TabsTrigger>
         </TabsList>
 
-        {/* 1. كشف الطلاب */}
-        <TabsContent value="students_report">
-          <Card className="border-none shadow-xl mt-4 overflow-hidden">
-            <CardHeader className="flex flex-row-reverse items-center justify-between border-b bg-slate-50/50 p-4">
-              <div className="flex gap-2">
-                <Select value={String(selectedMonth)} onValueChange={(v)=>setSelectedMonth(Number(v))}>
-                  <SelectTrigger className="w-32 font-bold"><SelectValue /></SelectTrigger>
-                  <SelectContent className="text-right">{Array.from({length:12}).map((_,i)=><SelectItem key={i} value={String(i+1)}>شهر {i+1}</SelectItem>)}</SelectContent>
-                </Select>
-                <Select value={String(selectedYear)} onValueChange={(v)=>setSelectedYear(Number(v))}>
-                  <SelectTrigger className="w-32 font-bold"><SelectValue /></SelectTrigger>
-                  <SelectContent className="text-right"><SelectItem value="2025">2025</SelectItem><SelectItem value="2026">2026</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <CardTitle className="font-black text-xl text-right">تحصيل الطلاب الشهري</CardTitle>
-            </CardHeader>
-            <Table>
-              <TableHeader><TableRow className="bg-slate-50">
-                <TableHead className="text-right font-black">الحالة</TableHead>
-                <TableHead className="text-right font-black">التاريخ</TableHead>
-                <TableHead className="text-right font-black">المبلغ</TableHead>
-                <TableHead className="text-right font-black">المجموعة</TableHead>
-                <TableHead className="text-right font-black">اسم الطالب</TableHead>
-              </TableRow></TableHeader>
+        <TabsContent value="students">
+          <Card className="border-none shadow-sm overflow-hidden">
+            <Table className="w-full text-right" dir="rtl">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="text-right">الطالب</TableHead>
+                  <TableHead className="text-right">نظام الاشتراك</TableHead>
+                  <TableHead className="text-right">المطلوب</TableHead>
+                  <TableHead className="text-right">المدفوع</TableHead>
+                  <TableHead className="text-right">المتبقي</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                {transactions.filter(t => t.type === 'income' && new Date(t.date).getMonth() + 1 === selectedMonth).map(t => (
-                  <TableRow key={t.id} className="font-bold text-right">
-                    <TableCell><Badge className={t.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{t.status === 'completed' ? 'تم' : 'جزئي'}</Badge></TableCell>
-                    <TableCell>{t.date}</TableCell>
-                    <TableCell className="text-emerald-600">{t.amount} ج.م</TableCell>
-                    <TableCell>{groups.find(g=>String(g.id)===t.groupId)?.name || "عام"}</TableCell>
-                    <TableCell>{t.student}</TableCell>
+                {students.map((s) => {
+                    const paid = filteredTransactions.filter(t => t.type === 'income' && t.student === s.id.toString()).reduce((sum, t) => sum + t.amount, 0);                  const required = calculateStudentRequired(s);
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-bold">{s.name}</TableCell>
+                      <TableCell className="text-xs font-bold text-slate-500">{s.subscriptionType === 'per_lesson' ? 'بالحصة' : 'باكدج'}</TableCell>
+                      <TableCell className="font-bold text-blue-700">{required} ج</TableCell>
+                      <TableCell className="font-bold text-green-600">{paid} ج</TableCell>
+                      <TableCell className={`font-black ${required - paid > 0 ? 'text-red-600' : 'text-slate-400'}`}>{required - paid} ج</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="teachers">
+          <Card className="border-none shadow-sm overflow-hidden">
+            <Table className="w-full text-right" dir="rtl">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="text-right">المدرس</TableHead>
+                  <TableHead className="text-right">المادة</TableHead>
+                  <TableHead className="text-right">نظام المحاسبة</TableHead>
+                  <TableHead className="text-right">المستحق الحالي</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teachers.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-bold">{t.name}</TableCell>
+                    <TableCell className="text-xs font-bold text-slate-500">{t.subject}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">
+                        {t.salaryType === 'fixed' ? 'راتب ثابت' : t.salaryType === 'per_lesson' ? 'بالحصة' : 'نسبة مئوية'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-black text-orange-600">{calculateTeacherDues(t)} ج</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -139,81 +319,27 @@ export default function Finance() {
           </Card>
         </TabsContent>
 
-        {/* 2. كشف المدرسين المطور */}
-        <TabsContent value="teachers_report">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-            {teachers.map((teach: any) => {
-              // التعديل هنا: بنجمع كل الـ teacherShare سواء من الطلاب أو من "إثبات حصة" بالمربع
-              const earned = transactions
-                .filter(t => t.teacherName === teach.name)
-                .reduce((acc, t) => acc + (t.teacherShare || 0), 0);
-              
-              // حساب ما تم صرفه فعلياً (العمليات اللي نقصت الخزينة)
-              const paid = transactions
-                .filter(t => t.teacherName === teach.name && t.type === "teacher_payment")
-                .reduce((acc, t) => acc + (t.amount || 0), 0);
-              
-              const balance = earned - paid;
-
-              return (
-                <Card key={teach.id} className="border-none shadow-lg overflow-hidden transition-all hover:shadow-xl">
-                  <div className={`h-2 ${balance > 0 ? 'bg-amber-500' : 'bg-blue-600'}`} />
-                  <CardContent className="p-6">
-                    <div className="flex flex-row-reverse justify-between items-start mb-6">
-                      <div className="flex flex-row-reverse gap-4">
-                        <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 border border-blue-100 shadow-sm">
-                          <Users className="w-8 h-8" />
-                        </div>
-                        <div className="text-right">
-                          <p className="font-black text-xl text-slate-800">{teach.name}</p>
-                          <p className="font-bold text-slate-400 text-sm">{teach.subject}</p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="border-blue-200 text-blue-700 font-bold px-3 py-1">
-                        {teach.contractType === 'percentage' ? `نسبة ${teach.rate}%` : `ثابت ${teach.rate} ج`}
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100 text-center">
-                        <p className="text-[10px] font-black text-emerald-600 mb-1">إجمالي له</p>
-                        <p className="font-black text-lg text-emerald-700">{earned}</p>
-                      </div>
-                      <div className="bg-red-50 p-3 rounded-2xl border border-red-100 text-center">
-                        <p className="text-[10px] font-black text-red-600 mb-1">قبض فعلياً</p>
-                        <p className="font-black text-lg text-red-700">{paid}</p>
-                      </div>
-                      <div className="bg-slate-900 p-3 rounded-2xl text-center shadow-md">
-                        <p className="text-[10px] font-black text-slate-300 mb-1">المتبقي له</p>
-                        <p className="font-black text-lg text-white">{balance}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
-
-        {/* 4. سجل الخزينة */}
-        <TabsContent value="history">
-          <Card className="mt-4 shadow-xl border-none overflow-hidden">
-            <Table>
-              <TableHeader><TableRow className="bg-slate-50">
-                <TableHead className="text-right font-black">حذف</TableHead>
-                <TableHead className="text-right font-black">التاريخ</TableHead>
-                <TableHead className="text-right font-black">المبلغ</TableHead>
-                <TableHead className="text-right font-black">النوع</TableHead>
-                <TableHead className="text-right font-black">البيان</TableHead>
-              </TableRow></TableHeader>
+        <TabsContent value="transactions">
+           <Card className="border-none shadow-sm overflow-hidden">
+            <Table className="w-full text-right" dir="rtl">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="text-right">التاريخ</TableHead>
+                  <TableHead className="text-right">البيان</TableHead>
+                  <TableHead className="text-right">المبلغ</TableHead>
+                  <TableHead className="text-center">إجراء</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
-                {transactions.sort((a,b)=>b.id-a.id).map(t => (
-                  <TableRow key={t.id} className="font-bold text-right">
-                    <TableCell><Button size="icon" variant="ghost" onClick={()=>setTransactions(transactions.filter(x=>x.id!==t.id))}><Trash2 className="w-4 h-4 text-red-500" /></Button></TableCell>
-                    <TableCell className="text-xs text-slate-500">{t.date}</TableCell>
-                    <TableCell className={t.type==='income'?'text-emerald-600':'text-red-600'}>{t.amount} ج.م</TableCell>
-                    <TableCell><Badge variant="outline" className={t.type==='income'?'text-emerald-600':'text-red-600'}>{t.type==='income'?'إيراد':'صرف'}</Badge></TableCell>
-                    <TableCell>{t.type==='income' ? `طالب: ${t.student}` : t.teacherName || t.description}</TableCell>
+                {filteredTransactions.slice().reverse().map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="text-xs font-bold">{t.date}</TableCell>
+                    <TableCell className="font-medium">{t.description}</TableCell>
+                    <TableCell className={`font-bold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.amount} ج</TableCell>
+                    <TableCell className="flex justify-center gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingTransaction(t); setForm(t); setIsDialogOpen(true); }}><Edit className="w-4 h-4 text-blue-600" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTransaction(t.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -222,128 +348,187 @@ export default function Finance() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog: إضافة معاملة */}
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="max-w-md text-right" dir="rtl">
-          <DialogHeader className="border-b pb-4">
-            <DialogTitle className="font-black text-2xl text-right w-full">تسجيل مالي جديد</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4 text-right">
-            <div>
-              <Label className="font-bold">نوع المعاملة</Label>
-              <Select value={form.type} onValueChange={(v:any)=>setForm({...form, type:v})}>
-                <SelectTrigger className="text-right font-bold"><SelectValue /></SelectTrigger>
-                <SelectContent className="text-right font-bold">
-                  <SelectItem value="income">دفع طالب</SelectItem>
-                  <SelectItem value="expense">مصروف عام</SelectItem>
-                  <SelectItem value="teacher_payment">استحقاق مدرس</SelectItem>
-                </SelectContent>
-              </Select>
+      {/* --- Dialog: تحصيل اشتراك طالب --- */}
+      <Dialog open={isStudentSettingsOpen} onOpenChange={setIsStudentSettingsOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto text-right p-4" dir="rtl">
+          <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-blue-600"><UserCheck /> تحصيل رسوم الطالب</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-3 space-y-3 bg-slate-50 p-4 rounded-xl border">
+              <Label className="font-bold text-xs">1. ابحث عن الطالب</Label>
+              <Input placeholder="بحث..." className="h-9 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <div className="h-[300px] overflow-y-auto border rounded-lg bg-white p-1">
+                {students.filter(s => s.name.includes(searchTerm)).map(s => (
+                  <div key={s.id} onClick={() => setStudentForm({ ...studentForm, ...s, id: s.id.toString(), manualDebt: 0 })}
+                    className={`p-2 cursor-pointer rounded-md text-xs font-bold mb-1 transition-colors ${studentForm.id === s.id.toString() ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-600'}`}>{s.name}</div>
+                ))}
+              </div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-               <div><Label className="font-bold">المبلغ</Label><Input type="number" className="font-black text-right" value={form.amount} onChange={e=>setForm({...form, amount:+e.target.value})} /></div>
-               <div><Label className="font-bold">التاريخ</Label><Input type="date" className="font-bold text-right" value={form.date} onChange={e=>setForm({...form, date:e.target.value})} /></div>
-            </div>
-            
-            {form.type === 'income' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="font-bold">المجموعة</Label>
-                  <Select onValueChange={v=>{setForm({...form, groupId:v}); filterStudentsByGroup(v);}}>
-                    <SelectTrigger className="text-right font-bold"><SelectValue placeholder="اختر" /></SelectTrigger>
-                    <SelectContent className="text-right font-bold">
-                      {groups.map((g:any)=><SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+
+            <div className="md:col-span-9 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border shadow-sm items-end">
+                 <div className="space-y-1"><Label className="font-bold text-xs">نظام المحاسبة</Label>
+                    <Select value={studentForm.subscriptionType} onValueChange={(v) => setStudentForm({...studentForm, subscriptionType: v})}>
+                        <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="per_lesson">تلقائي (بالحصة)</SelectItem>
+                            <SelectItem value="full_package">مبلغ ثابت (باكدج)</SelectItem>
+                            <SelectItem value="discounted_package">باكدج مع خصم</SelectItem>
+                        </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-1"><Label className="font-bold text-xs text-red-600">المتبقي (دين سابق)</Label>
+                    <Input type="number" value={studentForm.manualDebt} onChange={(e) => setStudentForm({...studentForm, manualDebt: Number(e.target.value)})} className="h-10 font-black text-red-600" />
+                 </div>
+                 <div className="space-y-1"><Label className="font-bold text-xs">ملاحظات التحصيل</Label>
+                    <Input value={studentForm.notes} onChange={(e) => setStudentForm({...studentForm, notes: e.target.value})} className="h-10 text-xs" />
+                 </div>
+              </div>
+
+              {studentForm.subscriptionType !== 'per_lesson' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-orange-50/40 p-4 rounded-xl border border-orange-100 animate-in fade-in zoom-in-95 duration-200">
+                   <div className="space-y-1">
+                      <Label className="font-bold text-xs text-orange-700">سعر الباكدج بالكامل</Label>
+                      <Input type="number" value={studentForm.packagePrice} onChange={(e) => setStudentForm({...studentForm, packagePrice: Number(e.target.value)})} className="h-10 bg-white" />
+                   </div>
+                   {studentForm.subscriptionType === 'discounted_package' && (
+                     <div className="space-y-1">
+                        <Label className="font-bold text-xs text-orange-700">نسبة الخصم (%)</Label>
+                        <Input type="number" value={studentForm.discountPercentage} onChange={(e) => setStudentForm({...studentForm, discountPercentage: Number(e.target.value)})} className="h-10 bg-white" />
+                     </div>
+                   )}
                 </div>
-                <div>
-                  <Label className="font-bold">الطالب</Label>
-                  <Select onValueChange={v=>setForm({...form, student:v})}>
-                    <SelectTrigger className="text-right font-bold"><SelectValue placeholder="اختر" /></SelectTrigger>
-                    <SelectContent className="text-right font-bold">
-                      {filteredStudents.map((s:any)=><SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-2">
+                    <Label className="font-black text-sm text-blue-800">تفاصيل الحصص للمواد المختارة</Label>
+                    <div className="flex items-center gap-2 bg-purple-50 p-1 px-3 rounded-full border border-purple-100">
+                        <Label className="font-black text-purple-700 text-[10px]">إعفاء مجاني</Label>
+                        <Switch checked={studentForm.isPackageFree} onCheckedChange={(v) => setStudentForm({...studentForm, isPackageFree: v})} className="scale-75" />
+                    </div>
+                </div>
+                
+                <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50"><TableRow>
+                        <TableHead className="w-10"></TableHead>
+                        <TableHead className="text-right">المادة</TableHead>
+                        <TableHead className="text-center">السعر</TableHead>
+                        <TableHead className="text-center">العدد</TableHead>
+                        <TableHead className="text-left px-6">إجمالي</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {teachers.map((teacher) => {
+                        const subData = studentForm.selectedSubjects.find(sub => sub.teacherId === teacher.id);
+                        const isSelected = !!subData;
+                        return (
+                          <TableRow key={teacher.id} className={isSelected ? "bg-blue-50/20" : "opacity-50"}>
+                            <TableCell className="p-2"><Checkbox checked={isSelected} onCheckedChange={() => handleSubjectToggle(teacher)} /></TableCell>
+                            <TableCell className="p-2 font-bold text-xs">{teacher.subject}</TableCell>
+                            <TableCell className="p-2"><Input type="number" disabled={!isSelected} value={isSelected ? subData.lessonPrice : ""} onChange={(e) => {
+                              const updated = studentForm.selectedSubjects.map(s => s.teacherId === teacher.id ? {...s, lessonPrice: Number(e.target.value)} : s);
+                              setStudentForm({...studentForm, selectedSubjects: updated});
+                            }} className="h-8 text-center text-xs font-black w-20 mx-auto" /></TableCell>
+                            <TableCell className="p-2"><Input type="number" disabled={!isSelected} value={isSelected ? subData.lessonsCount : ""} onChange={(e) => {
+                              const updated = studentForm.selectedSubjects.map(s => s.teacherId === teacher.id ? {...s, lessonsCount: Number(e.target.value)} : s);
+                              setStudentForm({...studentForm, selectedSubjects: updated});
+                            }} className="h-8 text-center text-xs font-black w-16 mx-auto" /></TableCell>
+                            <TableCell className="p-2 text-left px-6 font-black text-blue-700">{isSelected ? (subData.lessonPrice * subData.lessonsCount) : 0} ج</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex gap-4 items-stretch h-16 pt-2">
+                  <div className="flex-1 bg-slate-900 text-white p-3 px-6 rounded-xl flex items-center justify-between shadow-xl">
+                    <div><p className="text-[10px] font-bold text-slate-400">الصافي للتحصيل:</p><p className="text-2xl font-black text-green-400">{calculateStudentRequired(studentForm) - (studentForm.manualDebt || 0)} ج.م</p></div>
+                    <Calculator className="w-8 h-8 opacity-20" />
+                  </div>
+                  <Button className="flex-[0.6] bg-blue-600 hover:bg-blue-700 font-black rounded-xl text-lg shadow-xl" onClick={handleSaveStudentFinance}>حفظ الدفع</Button>
                 </div>
               </div>
-            )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            {form.type === 'teacher_payment' && (
-  <div className="space-y-4 border-2 border-dashed border-blue-100 p-4 rounded-xl bg-slate-50/50">
-    <div>
-      <Label className="font-bold">المدرس</Label>
-      <Select onValueChange={v => setForm({ ...form, teacherName: v })}>
-        <SelectTrigger className="text-right font-bold bg-white">
-          <SelectValue placeholder="اختر المدرس" />
-        </SelectTrigger>
-        <SelectContent className="text-right font-bold">
-          {teachers.map((t: any) => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
-    </div>
+      {/* --- Dialog: حساب المدرس --- */}
+      <Dialog open={isTeacherFinanceOpen} onOpenChange={setIsTeacherFinanceOpen}>
+        <DialogContent className="max-w-4xl text-right" dir="rtl">
+          <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-orange-600"><Wallet /> تسوية وصرف مستحقات المدرس</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-4 bg-slate-50 p-4 rounded-xl border">
+              <Label className="font-bold text-xs mb-2 block">اختر المدرس</Label>
+              <div className="h-[300px] overflow-y-auto space-y-1">
+                {teachers.map(t => (
+                  <div key={t.id} onClick={() => setTeacherFinForm({ ...teacherFinForm, ...t, id: t.id.toString() })}
+                    className={`p-3 rounded-lg text-xs font-black cursor-pointer transition-all ${teacherFinForm.id === t.id.toString() ? 'bg-orange-600 text-white shadow-md' : 'bg-white border hover:bg-orange-50'}`}>{t.name}</div>
+                ))}
+              </div>
+            </div>
+            <div className="md:col-span-8 space-y-5">
+              <div className="grid grid-cols-2 gap-4 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                <div className="space-y-1"><Label className="text-xs font-bold">نظام الدفع للمدرس</Label>
+                  <Select value={teacherFinForm.salaryType} onValueChange={(v) => setTeacherFinForm({...teacherFinForm, salaryType: v})}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">راتب ثابت</SelectItem>
+                      <SelectItem value="per_lesson">بالحصة</SelectItem>
+                      <SelectItem value="percentage">نسبة مئوية من الإجمالي</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label className="text-xs font-bold">ملاحظات الصرف</Label>
+                  <Input value={teacherFinForm.notes} onChange={(e) => setTeacherFinForm({...teacherFinForm, notes: e.target.value})} className="bg-white" placeholder="مثال: شهر يناير.." />
+                </div>
+              </div>
 
-    <div className="grid grid-cols-1 gap-2">
-      {/* الخيار الأول: إثبات استحقاق حصة */}
-      <div 
-        className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${form.description === "is_session" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white"}`}
-        onClick={() => setForm({ ...form, description: "is_session" })}
-      >
-        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.description === "is_session" ? "border-emerald-500" : "border-slate-300"}`}>
-          {form.description === "is_session" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
-        </div>
-        <div className="text-right">
-          <p className="font-black text-slate-700 text-sm">تسجيل "حصة مستحقة" للمدرس</p>
-          <p className="text-[10px] text-emerald-600 font-bold">(بيزود خانة "إجمالي له")</p>
-        </div>
-      </div>
+              <div className="grid grid-cols-3 gap-3">
+                {teacherFinForm.salaryType === 'fixed' && (
+                  <div className="col-span-3 space-y-1">
+                    <Label className="text-xs font-bold">الراتب الثابت المتفق عليه</Label>
+                    <Input type="number" value={teacherFinForm.fixedSalary} onChange={(e) => setTeacherFinForm({...teacherFinForm, fixedSalary: Number(e.target.value)})} />
+                  </div>
+                )}
+                {teacherFinForm.salaryType !== 'fixed' && (
+                  <>
+                    <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">سعر الحصة</Label><Input type="number" value={teacherFinForm.pricePerLesson} onChange={(e) => setTeacherFinForm({...teacherFinForm, pricePerLesson: Number(e.target.value)})} /></div>
+                    <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">عدد الحصص</Label><Input type="number" value={teacherFinForm.lessonsCount} onChange={(e) => setTeacherFinForm({...teacherFinForm, lessonsCount: Number(e.target.value)})} /></div>
+                    {teacherFinForm.salaryType === 'percentage' && (
+                      <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">النسبة (%)</Label><Input type="number" value={teacherFinForm.percentage} onChange={(e) => setTeacherFinForm({...teacherFinForm, percentage: Number(e.target.value)})} /></div>
+                    )}
+                  </>
+                )}
+              </div>
 
-      {/* الخيار الثاني: دفع نقدي كاش */}
-      <div 
-        className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${form.description === "is_payment" ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
-        onClick={() => setForm({ ...form, description: "is_payment" })}
-      >
-        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.description === "is_payment" ? "border-blue-500" : "border-slate-300"}`}>
-          {form.description === "is_payment" && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
-        </div>
-        <div className="text-right">
-          <p className="font-black text-slate-700 text-sm">تسجيل "دفع كاش" للمدرس</p>
-          <p className="text-[10px] text-blue-600 font-bold">(بيزود خانة "قبض فعلياً")</p>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+              <div className="bg-slate-900 p-6 rounded-2xl flex items-center justify-between text-white shadow-2xl">
+                <div><p className="text-xs font-bold text-slate-400">إجمالي المستحق للمدرس الآن:</p><p className="text-4xl font-black text-orange-400">{calculateTeacherDues(teacherFinForm)} <span className="text-lg">ج.م</span></p></div>
+                <Button className="bg-orange-600 hover:bg-orange-700 font-black px-10 h-14 rounded-xl text-lg shadow-lg" onClick={handleSaveTeacherPayment}>تأكيد صرف المستحقات</Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-{/* خانة الملاحظات بتظهر بس لو مش استحقاق مدرس */}
-{form.type !== 'teacher_payment' && (
-  <div>
-    <Label className="font-bold">ملاحظات</Label>
-    <Input 
-      className="font-bold text-right" 
-      value={form.description} 
-      onChange={e => setForm({ ...form, description: e.target.value })} 
-    />
-  </div>
-)}
-
-<div>
-  <Label className="font-bold">حالة الدفع</Label>
-  <Select value={form.status} onValueChange={(v: any) => setForm({ ...form, status: v })}>
-    <SelectTrigger className="text-right font-bold"><SelectValue /></SelectTrigger>
-    <SelectContent className="text-right font-bold">
-      <SelectItem value="completed">تم بالكامل</SelectItem>
-      <SelectItem value="partial">جزئي (متبقي)</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-
-<Button 
-  onClick={handleSave} 
-  className="w-full font-black py-7 text-lg bg-blue-600 hover:bg-blue-700 mt-4 shadow-lg active:scale-95 transition-transform"
->
-  حفظ المعاملة
-</Button>
+      {/* --- Dialog: إضافة حركة خزينة عامة --- --- */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="text-right" dir="rtl">
+          <DialogHeader><DialogTitle className="font-black">تسجيل حركة مالية</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label className="font-bold">النوع</Label>
+                <Select value={form.type} onValueChange={(v) => setForm({...form, type: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="income">إيراد (+)</SelectItem><SelectItem value="expense">مصروف (-)</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label className="font-bold">المبلغ</Label><Input type="number" value={form.amount} onChange={(e) => setForm({...form, amount: Number(e.target.value)})} /></div>
+            </div>
+            <div className="space-y-2"><Label className="font-bold">البيان / الوصف</Label><Input value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} /></div>
+            <div className="space-y-2"><Label className="font-bold">التاريخ</Label><Input type="date" value={form.date} onChange={(e) => setForm({...form, date: e.target.value})} /></div>
+            <Button className="w-full bg-slate-900 font-black h-12 rounded-xl shadow-lg" onClick={handleSaveTransaction}>حفظ في الخزينة</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -351,12 +536,21 @@ export default function Finance() {
   );
 }
 
-function StatCard({ title, value, icon, color, bg }: any) {
+// --- Helper Components ---
+function SummaryCard({ value, label, type, icon }: { value: number, label: string, type: 'income' | 'expense' | 'profit', icon: any }) {
+  const colors = { 
+    income: 'bg-green-50 text-green-700 border-green-100', 
+    expense: 'bg-red-50 text-red-700 border-red-100', 
+    profit: 'bg-blue-50 text-blue-700 border-blue-100' 
+  };
   return (
-    <Card className={`border-none shadow-md ${bg}`}>
-      <CardContent className="p-6 flex flex-row-reverse justify-between items-center text-right">
-        <div className={`w-12 h-12 rounded-2xl ${bg} flex items-center justify-center border border-white shadow-sm`}>{icon}</div>
-        <div><p className="text-sm font-bold text-slate-500 mb-1">{title}</p><p className={`text-2xl font-black ${color}`}>{value.toLocaleString()} ج.م</p></div>
+    <Card className={`${colors[type]} border shadow-sm rounded-2xl overflow-hidden`}>
+      <CardContent className="p-5 flex items-center justify-between">
+        <div className="text-right">
+          <div className="text-2xl font-black">{value} ج</div>
+          <div className="text-xs font-bold opacity-70 mt-1">{label}</div>
+        </div>
+        <div className="opacity-20">{icon}</div>
       </CardContent>
     </Card>
   );

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Bell, AlertTriangle, Calendar, CreditCard, UserX, Check, Trophy } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Bell, AlertTriangle, Calendar, CreditCard, UserX, Check, Trophy, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,8 @@ const priorityColors = { high: "border-r-4 border-r-destructive bg-destructive/5
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
-  useEffect(() => {
+  // دالة لحساب التنبيهات مع useCallback لتجنب إعادة الإنشاء
+  const calculateAlerts = useCallback(() => {
     // 1. سحب البيانات الخام من كل الأقسام
     const students = JSON.parse(localStorage.getItem("students-data") || "[]");
     const attendance = JSON.parse(localStorage.getItem("attendance-data") || "{}");
@@ -78,6 +79,13 @@ export default function Alerts() {
     setAlerts(liveAlerts.sort((a, b) => (a.read === b.read ? 0 : a.read ? 1 : -1)));
   }, []);
 
+  useEffect(() => {
+    calculateAlerts();
+    // تحديث تلقائي كل 30 ثانية للتحقق من التغييرات (مثل تسجيل حضور)
+    const interval = setInterval(calculateAlerts, 30000);
+    return () => clearInterval(interval);
+  }, [calculateAlerts]);
+
   const markAsRead = (id: string) => {
     const readIds = JSON.parse(localStorage.getItem("read-alerts-ids") || "[]");
     if (!readIds.includes(id)) {
@@ -94,41 +102,46 @@ export default function Alerts() {
   };
 
   return (
-    <div className="space-y-6 text-right" dir="rtl">
-      <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-primary/10">
+    <div className="space-y-4 text-right" dir="rtl">
+      <div className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-primary/10">
         <div>
-          <h1 className="text-2xl font-black flex items-center gap-2 text-primary"><Bell className="w-6 h-6 animate-swing" /> التنبيهات الذكية</h1>
-          <p className="text-muted-foreground text-xs font-bold font-egyptian">تحليل تلقائي لبيانات السنتر اليوم</p>
+          <h1 className="text-xl font-black flex items-center gap-2 text-primary"><Bell className="w-5 h-5 animate-swing" /> التنبيهات الذكية</h1>
+          <p className="text-muted-foreground text-[10px] font-bold font-egyptian">تحليل تلقائي لبيانات السنتر اليوم</p>
         </div>
-        <Button variant="outline" className="gap-2 font-black border-primary text-primary h-11" onClick={markAllAsRead}>
-          <Check className="w-4 h-4" /> تحديد الكل كمقروء
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-1 font-black border-primary text-primary h-9" onClick={markAllAsRead}>
+            <Check className="w-3 h-3" /> تحديد الكل كمقروء
+          </Button>
+          <Button variant="outline" className="gap-1 font-black border-primary text-primary h-9" onClick={calculateAlerts}>
+            <RefreshCw className="w-3 h-3" /> تحديث التنبيهات
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {alerts.length === 0 && (
-          <div className="text-center py-20 bg-muted/20 rounded-[2rem] border border-dashed">
+          <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed">
             <p className="text-muted-foreground font-bold">لا توجد تنبيهات حالياً.. كل شيء مستقر ✅</p>
           </div>
         )}
         {alerts.map((alert) => {
           const Icon = iconMap[alert.type];
           return (
-            <Card key={alert.id} className={cn("border-none shadow-sm transition-all rounded-2xl overflow-hidden", priorityColors[alert.priority], alert.read && "opacity-60 grayscale-[0.5]")}>
-              <CardContent className="flex items-center gap-4 py-4 px-6">
-                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm", 
+            <Card key={alert.id} className={cn("border-none shadow-sm transition-all rounded-xl overflow-hidden", priorityColors[alert.priority], alert.read && "opacity-60 grayscale-[0.5]")}>
+              <CardContent className="flex items-center gap-3 py-3 px-4">
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shadow-sm", 
                   alert.priority === "high" ? "bg-destructive text-white" : 
                   alert.priority === "medium" ? "bg-warning text-white" : "bg-blue-500 text-white")}>
-                  <Icon className="w-6 h-6" />
+                  <Icon className="w-5 h-5" />
                 </div>
 
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-slate-800 text-md">{alert.title}</h3>
-                    {!alert.read && <Badge className="bg-primary text-[9px] h-4">جديد</Badge>}
+                  <div className="flex items-center gap-1">
+                    <h3 className="font-black text-slate-800 text-sm">{alert.title}</h3>
+                    {!alert.read && <Badge className="bg-primary text-[8px] h-3">جديد</Badge>}
                   </div>
-                  <p className="text-sm font-bold text-muted-foreground mt-0.5">{alert.message}</p>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2 font-black uppercase tracking-tighter">
+                  <p className="text-xs font-bold text-muted-foreground mt-0.5">{alert.message}</p>
+                  <div className="flex items-center gap-1 text-[9px] text-muted-foreground mt-1 font-black uppercase tracking-tighter">
                     <Calendar className="w-3 h-3" /> {alert.time}
                   </div>
                 </div>

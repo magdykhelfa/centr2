@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'; 
-import { Settings as SetIcon, Building2, ShieldCheck, Trash2, UserPlus, Database, Save, Download, Upload, GraduationCap } from 'lucide-react'; 
+import { Settings as SetIcon, Building2, ShieldCheck, Trash2, UserPlus, Database, Save, Download, Upload, GraduationCap, RotateCcw } from 'lucide-react'; 
 import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -9,18 +9,18 @@ function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 export default function Settings() {
   const [s, setS] = useState<any>({ name: 'سنتر التفوق التعليمي', owner: 'م/ مجدي خلفه', users: [] });
   const [newUser, setNewUser] = useState({ 
-  name: '', user: '', password: '', role: 'staff',
-  permissions: { 
-    students: true, 
-    teachers: true, 
-    groups: true, 
-    sessions: true, 
-    attendance: true, 
-    exams: true, 
-    finance: false, 
-    settings: false 
-  } 
-});
+    name: '', user: '', password: '', role: 'staff',
+    permissions: { 
+      students: true, 
+      teachers: true, 
+      groups: true, 
+      sessions: true, 
+      attendance: true, 
+      exams: true, 
+      finance: false, 
+      settings: false 
+    } 
+  });
 
   useEffect(() => {
     const localS = localStorage.getItem('office_settings');
@@ -40,27 +40,28 @@ export default function Settings() {
   };
 
   const addUser = () => {
-  if (!newUser.user || !newUser.password) return toast.error('برجاء كتابة اسم المستخدم وكلمة المرور');
-  
-  const userToAdd = {
-    ...newUser,
-    id: Date.now(),
-    permissions: newUser.role === 'admin' 
-      ? { 
-          students: true, teachers: true, groups: true, sessions: true, 
-          attendance: true, exams: true, finance: true, settings: true 
-        } 
-      : newUser.permissions
+    if (!newUser.user || !newUser.password) return toast.error('برجاء كتابة اسم المستخدم وكلمة المرور');
+    
+    const userToAdd = {
+      ...newUser,
+      id: Date.now(),
+      permissions: newUser.role === 'admin' 
+        ? { 
+            students: true, teachers: true, groups: true, sessions: true, 
+            attendance: true, exams: true, finance: true, settings: true 
+          } 
+        : newUser.permissions
+    };
+    
+    setS({ ...s, users: [...(s.users || []), userToAdd] });
+    // تصفير الخانات بعد الإضافة
+    setNewUser({ 
+      name: '', user: '', password: '', role: 'staff', 
+      permissions: { students: true, teachers: true, groups: true, sessions: true, attendance: true, exams: true, finance: false, settings: false } 
+    });
+    toast.info('تمت الإضافة.. اضغط حفظ للتفعيل');
   };
-  
-  setS({ ...s, users: [...(s.users || []), userToAdd] });
-  // تصفير الخانات بعد الإضافة
-  setNewUser({ 
-    name: '', user: '', password: '', role: 'staff', 
-    permissions: { students: true, teachers: true, groups: true, sessions: true, attendance: true, exams: true, finance: false, settings: false } 
-  });
-  toast.info('تمت الإضافة.. اضغط حفظ للتفعيل');
-};
+
   // ✅ هذه هي الدالة التي كانت مفقودة وسببت الخطأ
   const togglePerm = (key: string) => {
     setNewUser({
@@ -71,6 +72,7 @@ export default function Settings() {
       }
     });
   };
+
   const exportBackup = () => {
     // 💡 تحديث: شملنا جميع جداول البيانات الجديدة لضمان أمان النظام بالكامل
     const data = {
@@ -113,6 +115,24 @@ export default function Settings() {
       } catch (err) { toast.error('ملف النسخة الاحتياطية غير صالح'); }
     };
     reader.readAsText(file);
+  };
+
+  // دالة ضبط مصنع: حذف جميع البيانات من localStorage وإعادة تحميل الصفحة
+  const resetFactory = () => {
+    if (window.confirm('هل أنت متأكد من رغبتك في ضبط مصنع؟ سيتم حذف جميع البيانات نهائياً ولا يمكن التراجع عن هذا الإجراء.')) {
+      // حذف جميع البيانات المخزنة
+      localStorage.removeItem('office_settings');
+      localStorage.removeItem('edu_users');
+      localStorage.removeItem('students-data');
+      localStorage.removeItem('groups-data');
+      localStorage.removeItem('teachers-data');
+      localStorage.removeItem('finance-transactions');
+      localStorage.removeItem('exams-data');
+      localStorage.removeItem('attendance-data');
+      
+      toast.success('تم ضبط المصنع بنجاح. سيتم إعادة تحميل الصفحة.');
+      setTimeout(() => window.location.reload(), 1000);
+    }
   };
 
   return (
@@ -205,6 +225,7 @@ export default function Settings() {
             <h2 className="font-black text-xs border-b border-white/10 pb-3 flex items-center gap-2"><Database className="w-4 h-4 text-primary" /> النسخ الاحتياطي</h2>
             <button onClick={exportBackup} className="w-full py-3 bg-primary text-white rounded-xl font-black text-[11px] flex items-center justify-center gap-2 border-none cursor-pointer transition-all"><Download className="w-4 h-4" /> حفظ نسخة</button>
             <label className="w-full py-3 bg-white/5 border border-white/10 border-dashed rounded-xl font-black text-[11px] flex items-center justify-center gap-2 cursor-pointer hover:bg-white/10 transition-all"><Upload className="w-4 h-4 text-primary" /> استعادة <input type="file" className="hidden" accept=".json" onChange={importBackup} /></label>
+            <button onClick={resetFactory} className="w-full py-3 bg-red-600 text-white rounded-xl font-black text-[11px] flex items-center justify-center gap-2 border-none cursor-pointer hover:bg-red-700 transition-all"><RotateCcw className="w-4 h-4" /> ضبط مصنع</button>
           </div>
         </div>
       </div>
