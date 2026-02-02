@@ -411,25 +411,17 @@ useEffect(() => {
   const allTeachers = JSON.parse(localStorage.getItem("teachers-data") || "[]");
   const allGroups = JSON.parse(localStorage.getItem("groups-data") || "[]");
 
-  // 2. جلب المدفوعات (منطق فلترة متقدم)
+  // 2. جلب المدفوعات (تصفية دقيقة)
   const studentFinance = allFinance.filter((f: any) => {
-    // التحقق من الكود (كما هو مخزن في صفحة الحسابات)
     const matchId = f.student && f.student.toString() === student.id.toString();
-    
-    // التحقق من وجود الاسم داخل الوصف (في حال كانت حركة عامة)
     const matchNameInDesc = f.description && f.description.includes(student.name);
-    
     return matchId || matchNameInDesc;
   });
 
-  // 3. جلب المدرسين والمواد المشترك بها (إظهار المواد)
-  // نعتمد هنا على المجموعات (Groups) التي ينتمي إليها الطالب
-  const teachersAndSubjects = student.enrolledGroups.map((groupName: string) => {
-    // ابحث عن المجموعة لجلب اسم المدرس منها
+  // 3. جلب المدرسين والمواد المشترك بها
+  const teachersAndSubjects = (student.enrolledGroups || []).map((groupName: string) => {
     const groupInfo = allGroups.find((g: any) => g.name === groupName);
-    // ابحث عن المدرس لجلب المادة
     const teacherInfo = allTeachers.find((t: any) => t.name === (groupInfo?.teacherName || student.teacherName));
-    
     return {
       groupName: groupName,
       teacherName: groupInfo?.teacherName || student.teacherName || "غير محدد",
@@ -437,23 +429,37 @@ useEffect(() => {
     };
   });
 
-  // 4. جلب الحضور
+  // 4. جلب سجل الحضور المصلح (يدعم هيكلة التاريخ)
   let studentAttendance: any[] = [];
-  Object.keys(allAttendance).forEach(groupName => {
-    if (allAttendance[groupName][student.id]) {
-      studentAttendance.push({ 
-        group: groupName, 
-        ...allAttendance[groupName][student.id] 
-      });
-    }
+  
+  // نمر على كل التواريخ المسجلة في الحضور
+  Object.keys(allAttendance).forEach((dateKey) => {
+    const dailyRecords = allAttendance[dateKey]; // مستوى التاريخ
+    
+    // نمر على كل المجموعات داخل هذا التاريخ
+    Object.keys(dailyRecords).forEach((groupName) => {
+      const groupStudents = dailyRecords[groupName]; // مستوى المجموعة
+      
+      // نتحقق إذا كان الطالب موجوداً في هذه المجموعة في هذا اليوم
+      if (groupStudents[student.id]) {
+        studentAttendance.push({
+          date: dateKey,
+          group: groupName,
+          ...groupStudents[student.id]
+        });
+      }
+    });
   });
+
+  // ترتيب الحضور من الأحدث للأقدم
+  studentAttendance.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // تحديث الحالة لعرض المودال
   setViewingStudent({ 
     ...student, 
     studentFinance, 
     studentAttendance,
-    teachersAndSubjects // هذه المصفوفة ستحتوي على المواد والمدرسين
+    teachersAndSubjects 
   });
 }}
               >

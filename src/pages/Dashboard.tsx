@@ -17,39 +17,49 @@ const getStatsFromStorage = (selectedMonth: number, selectedYear: number) => {
   
   const today = new Date();
   const todayISO = today.toISOString().split("T")[0];
-
-  // --- منطق الحضور الذكي ---
-  const presentStudents: any[] = [];
   const isCurrentSelection = (today.getMonth() + 1) === selectedMonth && today.getFullYear() === selectedYear;
 
-  Object.keys(attendance).forEach(groupName => {
-    const groupRecords = attendance[groupName];
-    Object.keys(groupRecords).forEach(studentId => {
-      const record = groupRecords[studentId];
-      if (record && record.status === "present") {
-        const isToday = record.date === todayISO;
-        const noDateAndCurrentMonth = !record.date && isCurrentSelection;
+  // --- منطق الحضور المحدث (متوافق مع هيكلة صفحة الحضور) ---
+  const presentStudents: any[] = [];
+  
+  // الوصول لمستوى التاريخ الحالي أولاً
+  const todayRecords = attendance[todayISO] || {};
 
-        if (isToday || noDateAndCurrentMonth) {
-           const studentInfo = students.find((s: any) => s.id.toString() === studentId.toString());
-           presentStudents.push({ 
-             name: studentInfo?.name || `طالب كود ${studentId}`, 
-             detail: `مجموعة: ${groupName} | الساعة: ${record.time || '---'}` 
-           });
+  // إذا كنا في الشهر الحالي، نبحث عن الحضور في تاريخ "اليوم"
+  if (isCurrentSelection) {
+    Object.keys(todayRecords).forEach(groupName => {
+      const groupStudents = todayRecords[groupName];
+      Object.keys(groupStudents).forEach(studentId => {
+        const record = groupStudents[studentId];
+        
+        // التحقق أن الحالة "present" وأن الطالب مسجل فعلاً
+        if (record && record.status === "present") {
+          const studentInfo = students.find((s: any) => s.id.toString() === studentId.toString());
+          if (studentInfo) {
+            presentStudents.push({ 
+              name: studentInfo.name, 
+              detail: `مجموعة: ${groupName} | الساعة: ${record.time || '---'}` 
+            });
+          }
         }
-      }
+      });
     });
-  });
+  }
 
-  // إيرادات الشهر
+  // --- إيرادات الشهر ---
   const monthIncomeDetails = finance.filter((f: any) => {
     const d = new Date(f.date);
     return f.type === "income" && (d.getMonth() + 1) === selectedMonth && d.getFullYear() === selectedYear;
   });
 
-  // إيرادات اليوم (تعتمد دائماً على تاريخ اليوم الفعلي)
-  const todayIncomeDetails = finance.filter((f: any) => f.date === todayISO && f.type === "income");
+  // --- إيرادات اليوم (تتصفر عند اختيار شهر غير الحالي) ---
+  let todayIncomeDetails = [];
+  if (isCurrentSelection) {
+    todayIncomeDetails = finance.filter((f: any) => f.date === todayISO && f.type === "income");
+  }
+
   const revenueToday = todayIncomeDetails.reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0);
+  const revenueMonth = monthIncomeDetails.reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0);
 
   const newStudentsCount = students.filter((s: any) => {
     const d = new Date(s.createdAt || new Date());
@@ -63,9 +73,9 @@ const getStatsFromStorage = (selectedMonth: number, selectedYear: number) => {
     groupsList: groups,
     presentStudents,
     monthIncomeDetails,
-    todayIncomeDetails, // نمررها هنا لاستخدامها عند النقر
+    todayIncomeDetails,
     revenueToday,
-    revenueMonth: monthIncomeDetails.reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0),
+    revenueMonth,
     newStudentsCount
   };
 };
