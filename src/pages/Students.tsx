@@ -359,106 +359,121 @@ useEffect(() => {
   </div>
 </div>
       <Card>
-        <CardHeader><CardTitle className="font-black">قائمة الطلاب الملحقين بالمجموعات ({filteredStudents.length})</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-  <TableHeader>
-    <TableRow className="bg-muted/50">
-      {/* 🟢 العمود الجديد للباركود */}
-      <TableHead className="text-right font-bold">كود الطالب</TableHead>
-      <TableHead className="text-right font-bold">الطالب</TableHead>
-      <TableHead className="text-right font-bold">المدرس</TableHead>
-      <TableHead className="text-right font-bold">المرحلة والصف</TableHead>
-      <TableHead className="text-right font-bold">المجموعات المشترك بها</TableHead>
-      <TableHead className="text-right font-bold">الحالة</TableHead>
-      <TableHead className="text-left font-bold">إجراءات</TableHead>
-    </TableRow>
-  </TableHeader>
-          <TableBody>
-            {filteredStudents.map((student) => (
-              <TableRow key={student.id} className="hover:bg-muted/20">
-                <TableCell>
-                  <div className="flex items-center gap-2 bg-slate-100 w-fit px-2 py-1 rounded border border-slate-300">
-                    <span className="font-mono text-xs font-black text-blue-800">
-                      {student.serial || `ST-${student.id}`}
-                    </span>
-                  </div>
-                </TableCell>
+  <CardHeader>
+    <CardTitle className="font-black">قائمة الطلاب الملحقين بالمجموعات ({filteredStudents.length})</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Table>
+      <TableHeader>
+        <TableRow className="bg-muted/50">
+          <TableHead className="text-right font-bold">كود الطالب</TableHead>
+          <TableHead className="text-right font-bold">الطالب</TableHead>
+          <TableHead className="text-right font-bold">المدرس</TableHead>
+          <TableHead className="text-right font-bold">المرحلة والصف</TableHead>
+          <TableHead className="text-right font-bold">المجموعات</TableHead>
+          <TableHead className="text-right font-bold">تاريخ الانضمام</TableHead>
+          <TableHead className="text-right font-bold">الحالة</TableHead>
+          <TableHead className="text-left font-bold">إجراءات</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredStudents.map((student) => (
+          <TableRow key={student.id} className="hover:bg-muted/20">
+            {/* 1. كود الطالب */}
+            <TableCell>
+              <div className="flex items-center gap-2 bg-slate-100 w-fit px-2 py-1 rounded border border-slate-300">
+                <span className="font-mono text-xs font-black text-blue-800">
+                  {student.serial || `ST-${student.id}`}
+                </span>
+              </div>
+            </TableCell>
 
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-slate-800">{student.name}</span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Phone size={10} /> {student.phone}
-                    </span>
-                  </div>
-                </TableCell>
+            {/* 2. اسم الطالب وهاتفه */}
+            <TableCell>
+              <div className="flex flex-col">
+                <span className="font-bold text-slate-800">{student.name}</span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Phone size={10} /> {student.phone}
+                </span>
+              </div>
+            </TableCell>
 
-                <TableCell>
-                  <span className="font-bold">{student.teacherName}</span>
-                </TableCell>
+            {/* 3. المدرس */}
+            <TableCell>
+              <span className="font-bold">{student.teacherName}</span>
+            </TableCell>
 
-                <TableCell>
-                  <span className="font-bold">{getGradeLabel(student.stage, student.grade)}</span>
-                </TableCell>
+            {/* 4. المرحلة والصف */}
+            <TableCell>
+              <span className="font-bold">{getGradeLabel(student.stage, student.grade)}</span>
+            </TableCell>
 
-                <TableCell>
-                  <div className="flex flex-wrap gap-1 max-w-[250px]">
-                    {student.enrolledGroups.map((g: string) => (
-                      <Badge key={g} variant="secondary" className="text-[10px] font-medium">
-                        {g}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-
-                <TableCell>
-                  <Badge className={student.status === "active" ? "bg-success/10 text-success" : ""}>
-                    {student.status === "active" ? "نشط" : "متوقف"}
+            {/* 5. المجموعات المشترك بها */}
+            <TableCell>
+              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                {student.enrolledGroups.map((g: string) => (
+                  <Badge key={g} variant="secondary" className="text-[10px] font-medium">
+                    {g}
                   </Badge>
-                </TableCell>
+                ))}
+              </div>
+            </TableCell>
 
-                <TableCell>
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-blue-600 hover:bg-blue-50"
-                      onClick={() => setQrStudent(student)}
-                    >
-                      <QrCode className="w-4 h-4" />
-                    </Button>
+            {/* 6. تاريخ الانضمام (الخانة الجديدة) */}
+            <TableCell>
+              <span className="text-sm font-medium text-slate-600">
+                {student.subscriptionDate || "—"}
+              </span>
+            </TableCell>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-primary"
-                      onClick={() => {
-                        setForm(student);
-                        setEditingStudentId(student.id);
-                        setIsDialogOpen(true);
-                      }}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    
-                    {/* زر الحذف المرتبط بالمنطق الجديد */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:bg-red-50"
-                      onClick={() => handleDelete(student)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+            {/* 7. الحالة */}
+            <TableCell>
+              <Badge className={student.status === "active" ? "bg-success/10 text-success" : "bg-slate-100 text-slate-500"}>
+                {student.status === "active" ? "نشط" : "متوقف"}
+              </Badge>
+            </TableCell>
+
+            {/* 8. الإجراءات */}
+            <TableCell>
+              <div className="flex justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                  onClick={() => setQrStudent(student)}
+                >
+                  <QrCode className="w-4 h-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-primary"
+                  onClick={() => {
+                    setForm(student);
+                    setEditingStudentId(student.id);
+                    setIsDialogOpen(true);
+                  }}
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:bg-red-50"
+                  onClick={() => handleDelete(student)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  </CardContent>
+</Card>
 
     {/* مودال كارت الطالب */}
     <Dialog open={!!qrStudent} onOpenChange={() => setQrStudent(null)}>

@@ -15,32 +15,43 @@ const getStatsFromStorage = (selectedMonth: number, selectedYear: number) => {
   const attendance = JSON.parse(localStorage.getItem("attendance-data") || "{}");
   const finance = JSON.parse(localStorage.getItem("finance-transactions") || "[]");
   
-  const todayISO = new Date().toISOString().split("T")[0];
+  const today = new Date();
+  const todayISO = today.toISOString().split("T")[0];
 
-  // --- إصلاح منطق الحضور بناءً على كود صفحة التحضير ---
+  // --- منطق الحضور الذكي ---
   const presentStudents: any[] = [];
   
-  // نلف على المجموعات (المفاتيح الأساسية في attendance-data)
+  // نحدد هل الشهر المختار هو الشهر الحالي فعلاً؟
+  const isCurrentSelection = (today.getMonth() + 1) === selectedMonth && today.getFullYear() === selectedYear;
+
   Object.keys(attendance).forEach(groupName => {
-    const groupRecords = attendance[groupName]; // هذا يحتوي على الطلاب { studentId: { status, time } }
-    
+    const groupRecords = attendance[groupName];
     Object.keys(groupRecords).forEach(studentId => {
       const record = groupRecords[studentId];
       
-      // بما أن كود التحضير لا يخزن تاريخاً، سنعتبر كل ما هو موجود حالياً في الحضور هو "حضور اليوم"
-      // (كما يعمل كود صفحة التحضير في عرض الإحصائيات هناك)
       if (record && record.status === "present") {
-        const studentInfo = students.find((s: any) => s.id.toString() === studentId.toString());
-        presentStudents.push({ 
-          name: studentInfo?.name || `طالب كود ${studentId}`, 
-          detail: `مجموعة: ${groupName} | الساعة: ${record.time || 'غير مسجل'}` 
-        });
+        // 1. إذا كان السجل يحتوي على تاريخ، نقارنه باليوم
+        // 2. إذا لم يحتوي على تاريخ (مثل كودك الحالي)، نظهره فقط إذا كان المستخدم يختار الشهر الحالي
+        const isToday = record.date === todayISO;
+        const noDateAndCurrentMonth = !record.date && isCurrentSelection;
+
+        if (isToday || noDateAndCurrentMonth) {
+           const studentInfo = students.find((s: any) => s.id.toString() === studentId.toString());
+           presentStudents.push({ 
+             name: studentInfo?.name || `طالب كود ${studentId}`, 
+             detail: `مجموعة: ${groupName} | الساعة: ${record.time || '---'}` 
+           });
+        }
       }
     });
   });
 
-  const todayIncomeDetails = finance.filter((f: any) => f.date === todayISO && f.type === "income");
-  
+  // إيرادات اليوم (تظهر فقط إذا كان الشهر المختار هو الشهر الحالي)
+  const revenueToday = isCurrentSelection 
+    ? finance.filter((f: any) => f.date === todayISO && f.type === "income").reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0)
+    : 0;
+
+  // إيرادات الشهر (تعتمد كلياً على الفلتر)
   const monthIncomeDetails = finance.filter((f: any) => {
     const d = new Date(f.date);
     return f.type === "income" && (d.getMonth() + 1) === selectedMonth && d.getFullYear() === selectedYear;
@@ -57,9 +68,8 @@ const getStatsFromStorage = (selectedMonth: number, selectedYear: number) => {
     studentsList: students,
     groupsList: groups,
     presentStudents,
-    todayIncomeDetails,
     monthIncomeDetails,
-    revenueToday: todayIncomeDetails.reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0),
+    revenueToday,
     revenueMonth: monthIncomeDetails.reduce((acc: number, f: any) => acc + (Number(f.amount) || 0), 0),
     newStudentsCount
   };
@@ -67,8 +77,8 @@ const getStatsFromStorage = (selectedMonth: number, selectedYear: number) => {
 
 export default function Dashboard() {
   const [viewDate, setViewDate] = useState({
-    month: Number(localStorage.getItem('selectedMonth')) || new Date().getMonth() + 1,
-    year: Number(localStorage.getItem('selectedYear')) || new Date().getFullYear()
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear()
   });
 
   const [stats, setStats] = useState(getStatsFromStorage(viewDate.month, viewDate.year));
@@ -77,8 +87,6 @@ export default function Dashboard() {
   });
 
   useEffect(() => { 
-    localStorage.setItem('selectedMonth', viewDate.month.toString());
-    localStorage.setItem('selectedYear', viewDate.year.toString());
     const update = () => setStats(getStatsFromStorage(viewDate.month, viewDate.year));
     update();
     const interval = setInterval(update, 2000); 
@@ -91,55 +99,56 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-500" dir="rtl">
-      {/* Header & Global Date Filter */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-3 rounded-xl border shadow-sm">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-blue-600 rounded-lg text-white"><Calendar className="w-5 h-5" /></div>
           <div>
-            <h1 className="text-xl font-black text-slate-800">لوحة التحكم</h1>
-            <p className="text-[10px] text-muted-foreground font-bold">تغيير الشهر يغير حسابات الشهر فقط، الحضور دائم لليوم</p>
+            <h1 className="text-xl font-black text-slate-800">لوحة التحكم </h1>
+            <p className="text-[10px] text-muted-foreground font-bold font-sans">
+              يتم عرض حضور وإيراد اليوم عند اختيار شهر {new Date().getMonth() + 1} فقط
+            </p>
           </div>
         </div>
-        <div className="flex gap-2 bg-slate-50 p-1 rounded-lg border">
+        
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
           <select className="text-xs font-bold p-1 border rounded bg-white" value={viewDate.month} onChange={(e) => setViewDate({...viewDate, month: Number(e.target.value)})}>
             {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>شهر {i+1}</option>)}
           </select>
           <select className="text-xs font-bold p-1 border rounded bg-white" value={viewDate.year} onChange={(e) => setViewDate({...viewDate, year: Number(e.target.value)})}>
-            {[2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            {[2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
       </div>
       
-      {/* الرو الأول: الإحصائيات العامة والحضور */}
+      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div onClick={() => openDetails("قائمة كل الطلاب", stats.studentsList.map(s => ({name: s.name, detail: s.phone})))} className="cursor-pointer active:scale-95 transition-all">
+        <div onClick={() => openDetails("الطلاب", stats.studentsList.map(s => ({name: s.name, detail: s.phone})))} className="cursor-pointer">
           <StatCard title="إجمالي الطلاب" value={stats.studentsCount} icon={Users} />
         </div>
-        <div onClick={() => openDetails("المجموعات المسجلة", stats.groupsList.map(g => ({name: g.name, detail: g.teacherName})))} className="cursor-pointer active:scale-95 transition-all">
+        <div onClick={() => openDetails("المجموعات", stats.groupsList.map(g => ({name: g.name, detail: g.teacherName})))} className="cursor-pointer">
           <StatCard title="مجموعات مفعلة" value={stats.groupsCount} icon={UsersRound} />
         </div>
-        <div onClick={() => openDetails("تفاصيل حضور اليوم", stats.presentStudents)} className="cursor-pointer active:scale-95 transition-all">
+        <div onClick={() => openDetails("حضور اليوم", stats.presentStudents)} className="cursor-pointer">
           <StatCard title="حضور اليوم" value={stats.presentStudents.length} icon={ClipboardCheck} variant="success" />
         </div>
       </div>
 
-      {/* الرو الثاني: الماليات والطلاب الجدد */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div onClick={() => openDetails("مقبوضات اليوم", stats.todayIncomeDetails, 'money')} className="cursor-pointer active:scale-95 transition-all">
-          <StatCard title="إيراد اليوم" value={`${stats.revenueToday} ج`} icon={Wallet} variant="success" />
-        </div>
-        <div onClick={() => openDetails(`دخل شهر ${viewDate.month}`, stats.monthIncomeDetails, 'money')} className="cursor-pointer active:scale-95 transition-all">
+        <StatCard title="إيراد اليوم" value={`${stats.revenueToday} ج`} icon={Wallet} variant="success" />
+        <div onClick={() => openDetails(`إيراد شهر ${viewDate.month}`, stats.monthIncomeDetails, 'money')} className="cursor-pointer">
           <StatCard title="إيراد الشهر" value={`${stats.revenueMonth} ج`} icon={TrendingUp} variant="info" />
         </div>
-        <StatCard title="طلاب جدد (شهر 0{viewDate.month})" value={stats.newStudentsCount} icon={UsersRound} variant="info" />
+        <StatCard title="طلاب جدد" value={stats.newStudentsCount} icon={UsersRound} variant="info" />
       </div>
 
+      {/* Charts & Table */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-8 space-y-4">
           <TodaySchedule />
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-white p-2 rounded-xl border shadow-sm"><AttendanceChart /></div>
-            <div className="bg-white p-2 rounded-xl border shadow-sm"><RevenueChart /></div>
+             <AttendanceChart />
+             <RevenueChart />
           </div>
         </div>
         <div className="xl:col-span-4 space-y-4">
@@ -148,26 +157,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* نافذة التفاصيل */}
+      {/* Dialog */}
       <Dialog open={detailConfig.open} onOpenChange={(o) => setDetailConfig({...detailConfig, open: o})}>
-        <DialogContent className="max-w-md rounded-2xl" dir="rtl">
-          <DialogHeader className="border-b pb-3 mb-2">
-            <DialogTitle className="text-blue-600 font-black flex items-center gap-2">
-              <Info className="w-5 h-5" /> {detailConfig.title}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[50vh] overflow-y-auto pr-1">
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader className="border-b pb-2"><DialogTitle className="text-blue-600 font-black text-sm flex items-center gap-2"><Info className="w-4 h-4" /> {detailConfig.title}</DialogTitle></DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto">
             <Table>
-              <TableHeader><TableRow className="bg-slate-50"><TableHead className="text-right font-bold">الاسم/البيان</TableHead><TableHead className="text-right font-bold">التفاصيل</TableHead></TableRow></TableHeader>
               <TableBody>
                 {detailConfig.data.length > 0 ? detailConfig.data.map((item, i) => (
-                  <TableRow key={i} className="hover:bg-slate-50">
-                    <TableCell className="font-bold text-[12px] py-3">{item.name || item.description}</TableCell>
-                    <TableCell className="text-[12px] py-3 font-medium text-blue-600">
-                      {detailConfig.type === 'money' ? `${item.amount} ج.م` : (item.detail || "---")}
-                    </TableCell>
+                  <TableRow key={i}>
+                    <TableCell className="font-bold text-xs">{item.name || item.description}</TableCell>
+                    <TableCell className="text-xs text-blue-600 font-medium text-left">{detailConfig.type === 'money' ? `${item.amount} ج` : item.detail}</TableCell>
                   </TableRow>
-                )) : <TableRow><TableCell colSpan={2} className="text-center py-10 text-slate-400 font-bold text-xs">لا يوجد بيانات</TableCell></TableRow>}
+                )) : <TableRow><TableCell className="text-center py-10 text-slate-400">لا توجد بيانات لهذا الاختيار</TableCell></TableRow>}
               </TableBody>
             </Table>
           </div>
