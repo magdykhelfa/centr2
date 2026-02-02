@@ -40,7 +40,7 @@ export default function Attendance() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [qrStudent, setQrStudent] = useState<any>(null);
   const [attendanceData, setAttendanceData] = useState<Record<string, any>>({});
-  
+  const todayKey = new Date().toISOString().split('T')[0];
   const scannerBuffer = useRef("");
   const codeReader = useRef(new BrowserMultiFormatReader());
   const controlsRef = useRef<any>(null);
@@ -133,26 +133,53 @@ export default function Attendance() {
   };
 
   const registerAttendance = (studentId: number) => {
-    if (!selectedGroup) return;
-    const currentGroupAtt = attendanceData[selectedGroup] || {};
-    if (currentGroupAtt[studentId]) return;
+  if (!selectedGroup) return;
 
-    const timeNow = new Date().toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' });
-    const newAtt = { 
-      ...attendanceData, 
-      [selectedGroup]: { ...currentGroupAtt, [studentId]: { status: "present", time: timeNow } } 
-    };
-    setAttendanceData(newAtt);
-    localStorage.setItem("attendance-data", JSON.stringify(newAtt));
-    new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play().catch(() => {});
+  // هيكلة البيانات: [التاريخ][المجموعة][الطالب]
+  const allData = { ...attendanceData };
+  if (!allData[todayKey]) allData[todayKey] = {};
+  if (!allData[todayKey][selectedGroup]) allData[todayKey][selectedGroup] = {};
+
+  const currentGroupAtt = allData[todayKey][selectedGroup];
+  if (currentGroupAtt[studentId]) return;
+
+  const timeNow = new Date().toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' });
+  
+  // تحديث البيانات
+  allData[todayKey][selectedGroup][studentId] = { 
+    status: "present", 
+    time: timeNow,
+    date: todayKey // إضافة التاريخ داخل بيانات الطالب أيضاً للداش بورد
   };
 
+  setAttendanceData(allData);
+  localStorage.setItem("attendance-data", JSON.stringify(allData));
+  new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play().catch(() => {});
+};
+
   const removeAttendance = (studentId: number) => {
-    const currentGroupAtt = { ...attendanceData[selectedGroup] };
-    delete currentGroupAtt[studentId];
-    const newAtt = { ...attendanceData, [selectedGroup]: currentGroupAtt };
-    setAttendanceData(newAtt);
-    localStorage.setItem("attendance-data", JSON.stringify(newAtt));
+    if (!selectedGroup) return;
+
+    // 1. أخذ نسخة من البيانات الحالية
+    const allData = { ...attendanceData };
+
+    // 2. التحقق من وجود بيانات لهذا اليوم وهذه المجموعة
+    if (allData[todayKey] && allData[todayKey][selectedGroup]) {
+      
+      // 3. حذف الطالب من النسخة
+      const updatedGroupAtt = { ...allData[todayKey][selectedGroup] };
+      delete updatedGroupAtt[studentId];
+
+      // 4. تحديث الكائن الكبير
+      allData[todayKey][selectedGroup] = updatedGroupAtt;
+
+      // 5. حفظ وتحديث الحالة
+      setAttendanceData(allData);
+      localStorage.setItem("attendance-data", JSON.stringify(allData));
+      
+      // صوت خفيف للحذف (اختياري)
+      console.log(`Student ${studentId} removed from ${selectedGroup} on ${todayKey}`);
+    }
   };
 
   // استخراج الخيارات بناءً على قاعدة صفحة المجموعات: المدرس يحدد المرحلة والصف، ثم المجموعات من groups
@@ -167,8 +194,7 @@ export default function Attendance() {
     selectedGroup && st.enrolledGroups?.includes(selectedGroup)
   );
 
-  const currentAtt = (selectedGroup && attendanceData[selectedGroup]) ? attendanceData[selectedGroup] : {};
-  // ------------------------------------------------
+const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // ------------------------------------------------
 
   return (
     <div className="space-y-4 p-1">
@@ -267,8 +293,13 @@ export default function Attendance() {
                           </div>
                           <div>
                             <p className="font-black text-base">{student.name}</p>
-                            {att && <p className="text-xs font-bold text-green-600">حضر الساعة {att.time}</p>}
-                          </div>
+{att && (
+  <div>
+    <p className="text-xs font-bold text-green-600">حضر الساعة {att.time}</p>
+    {/* إضافة تاريخ اليوم تحت الساعة */}
+    <p className="text-[10px] text-slate-400 font-medium">بتاريخ: {todayKey}</p>
+  </div>
+)}                          </div>
                         </div>
                         <div className="flex gap-1">
                           {att ? (

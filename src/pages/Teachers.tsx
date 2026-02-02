@@ -19,7 +19,7 @@ interface Teacher {
   grade: number;
   contractType: "percentage" | "per-session" | "fixed";
   status: "active" | "inactive";
-  
+  joinDate: string;
 }
 
 const stageOptions = [
@@ -44,7 +44,7 @@ const getGradeOptions = (stage: string) => {
 
 export default function CenterTeachers() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null); // حالة لمعرفة هل نحن في وضع التعديل
+  const [editId, setEditId] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>(() => {
     const saved = localStorage.getItem("teachers-data");
     return saved ? JSON.parse(saved) : [];
@@ -57,15 +57,16 @@ export default function CenterTeachers() {
     stage: "primary" as Teacher["stage"],
     grade: 1,
     contractType: "percentage" as Teacher["contractType"],
+    joinDate: new Date().toISOString().split('T')[0],
   });
 
   const [gradeOptions, setGradeOptions] = useState(getGradeOptions(form.stage));
 
   useEffect(() => {
-    setGradeOptions(getGradeOptions(form.stage));
-    // إعادة تعيين الصف إذا لم يكن متوافقاً
-    if (!gradeOptions.some(opt => opt.value === form.grade)) {
-      setForm(prev => ({ ...prev, grade: gradeOptions[0]?.value || 1 }));
+    const options = getGradeOptions(form.stage);
+    setGradeOptions(options);
+    if (!options.some(opt => opt.value === form.grade)) {
+      setForm(prev => ({ ...prev, grade: options[0]?.value || 1 }));
     }
   }, [form.stage]);
 
@@ -74,27 +75,18 @@ export default function CenterTeachers() {
     window.dispatchEvent(new Event("storage"));
   }, [teachers]);
 
-  // دالة الحفظ (إضافة أو تعديل)
-  const handleSaveTeacher = () => {
-    if (!form.name || !form.subject) {
-      alert("برجاء إدخال الاسم والمادة");
-      return;
-    }
-
-    if (editId) {
-      // وضع التعديل
-      setTeachers(teachers.map(t => t.id === editId ? { ...t, ...form } : t));
-    } else {
-      // وضع الإضافة
-      const newTeacher: Teacher = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...form,
-        status: "active",
-      };
-      setTeachers([...teachers, newTeacher]);
-    }
-
-    closeModal();
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditId(null);
+    setForm({
+      name: "",
+      phone: "",
+      subject: "",
+      stage: "primary",
+      grade: 1,
+      contractType: "percentage",
+      joinDate: new Date().toISOString().split('T')[0],
+    });
   };
 
   const startEdit = (teacher: Teacher) => {
@@ -106,14 +98,28 @@ export default function CenterTeachers() {
       stage: teacher.stage,
       grade: teacher.grade,
       contractType: teacher.contractType,
+      joinDate: teacher.joinDate || new Date().toISOString().split('T')[0],
     });
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditId(null);
-    setForm({ name: "", phone: "", subject: "", stage: "primary", grade: 1, contractType: "percentage" });
+  const handleSaveTeacher = () => {
+    if (!form.name || !form.subject) {
+      alert("برجاء إدخال الاسم والمادة");
+      return;
+    }
+
+    if (editId) {
+      setTeachers(teachers.map(t => t.id === editId ? { ...t, ...form } : t));
+    } else {
+      const newTeacher: Teacher = {
+        id: Math.random().toString(36).substr(2, 9),
+        ...form,
+        status: "active",
+      };
+      setTeachers([...teachers, newTeacher]);
+    }
+    closeModal();
   };
 
   const deleteTeacher = (id: string) => {
@@ -146,6 +152,10 @@ export default function CenterTeachers() {
               <div className="space-y-1.5">
                 <Label className="font-bold">اسم المدرس</Label>
                 <Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="أدخل اسم المدرس الكامل" className="font-bold text-right" />
+              </div>
+              <div className="space-y-1.5 text-right">
+                <Label className="font-bold">تاريخ الانضمام</Label>
+                <Input type="date" value={form.joinDate} onChange={(e) => setForm({...form, joinDate: e.target.value})} className="font-bold text-right" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5 text-right">
@@ -211,6 +221,7 @@ export default function CenterTeachers() {
                 <TableHead className="text-right font-black">المرحلة</TableHead>
                 <TableHead className="text-right font-black">الصف</TableHead>
                 <TableHead className="text-right font-black">نوع التعاقد</TableHead>
+                <TableHead className="text-right font-black">تاريخ الانضمام</TableHead>
                 <TableHead className="text-right font-black">الحالة</TableHead>
                 <TableHead className="text-left font-black">إجراءات</TableHead>
               </TableRow>
@@ -218,35 +229,39 @@ export default function CenterTeachers() {
             <TableBody>
               {teachers.map((teacher) => (
                 <TableRow key={teacher.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell>
-                    <span className="font-black text-slate-800">{teacher.name}</span>
+                  <TableCell className="font-black text-slate-800">{teacher.name}</TableCell>
+                  <TableCell className="font-bold text-slate-700">{teacher.phone}</TableCell>
+                  <TableCell className="font-bold text-slate-700">{teacher.subject}</TableCell>
+                  <TableCell className="font-bold text-slate-700">
+                    {stageOptions.find(s => s.value === teacher.stage)?.label}
                   </TableCell>
-                  <TableCell>
-                    <span className="font-bold text-slate-700">{teacher.phone}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-bold text-slate-700">{teacher.subject}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-bold text-slate-700">{stageOptions.find(s => s.value === teacher.stage)?.label}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-bold text-slate-700">{getGradeLabel(teacher.stage, teacher.grade)}</span>
+                  <TableCell className="font-bold text-slate-700">
+                    {getGradeLabel(teacher.stage, teacher.grade)}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-bold">
-                      {teacher.contractType === "percentage" ? "نسبة" : teacher.contractType === "per-session" ? "بالحصة" : "راتب شهري"}
+                      {teacher.contractType === "percentage" ? "نسبة" : teacher.contractType === "per-session" ? "بالحصة" : "راتب"}
                     </Badge>
+                  </TableCell>
+                  {/* عمود تاريخ الانضمام */}
+                  <TableCell className="font-bold text-slate-600 text-sm">
+                    {teacher.joinDate || "—"}
                   </TableCell>
                   <TableCell>
                     <Badge className={cn("font-bold text-[10px]", teacher.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600")}>
                       {teacher.status === "active" ? "نشط" : "غير نشط"}
                     </Badge>
                   </TableCell>
+                  
+                  {/* عمود الإجراءات في النهاية */}
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => startEdit(teacher)} className="h-8 w-8 text-blue-600 hover:bg-blue-50"><Edit size={16} /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => deleteTeacher(teacher.id)} className="h-8 w-8 text-red-400 hover:text-red-600"><Trash2 size={16} /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => startEdit(teacher)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
+                        <Edit size={16} />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => deleteTeacher(teacher.id)} className="h-8 w-8 text-red-400 hover:text-red-600">
+                        <Trash2 size={16} />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -14,7 +14,6 @@ export default function Settings() {
       students: true, 
       teachers: true, 
       groups: true, 
-      sessions: true, 
       attendance: true, 
       exams: true, 
       finance: false, 
@@ -57,7 +56,7 @@ export default function Settings() {
     // تصفير الخانات بعد الإضافة
     setNewUser({ 
       name: '', user: '', password: '', role: 'staff', 
-      permissions: { students: true, teachers: true, groups: true, sessions: true, attendance: true, exams: true, finance: false, settings: false } 
+      permissions: { students: true, teachers: true, groups: true,   attendance: true, exams: true, finance: false, settings: false } 
     });
     toast.info('تمت الإضافة.. اضغط حفظ للتفعيل');
   };
@@ -181,7 +180,6 @@ export default function Settings() {
     students: 'الطلاب',
     teachers: 'المدرسين',
     groups: 'المجموعات',
-    sessions: 'جدول الحصص',
     attendance: 'تسجيل الحضور',
     exams: 'الامتحانات',
     finance: 'الحسابات المادية',
