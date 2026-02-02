@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'; 
-import { Settings as SetIcon, Building2, ShieldCheck, Trash2, UserPlus, Database, Save, Download, Upload, GraduationCap, RotateCcw } from 'lucide-react'; 
+// ✅ تمت إضافة أيقونة Archive
+import { Settings as SetIcon, Building2, ShieldCheck, Trash2, UserPlus, Database, Save, Download, Upload, GraduationCap, RotateCcw, Archive } from 'lucide-react'; 
 import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -16,6 +17,7 @@ export default function Settings() {
       groups: true, 
       attendance: true, 
       exams: true, 
+      archive: false, // ✅ إضافة الحالة الابتدائية للأرشيف هنا
       finance: false, 
       settings: false 
     } 
@@ -47,21 +49,20 @@ export default function Settings() {
       permissions: newUser.role === 'admin' 
         ? { 
             students: true, teachers: true, groups: true, sessions: true, 
-            attendance: true, exams: true, finance: true, settings: true 
+            attendance: true, exams: true, finance: true, settings: true,
+            archive: true // ✅ المدير يحصل على صلاحية الأرشيف تلقائياً
           } 
         : newUser.permissions
     };
     
     setS({ ...s, users: [...(s.users || []), userToAdd] });
-    // تصفير الخانات بعد الإضافة
     setNewUser({ 
       name: '', user: '', password: '', role: 'staff', 
-      permissions: { students: true, teachers: true, groups: true,   attendance: true, exams: true, finance: false, settings: false } 
+      permissions: { students: true, teachers: true, groups: true, attendance: true, exams: true, archive: false, finance: false, settings: false } 
     });
     toast.info('تمت الإضافة.. اضغط حفظ للتفعيل');
   };
 
-  // ✅ هذه هي الدالة التي كانت مفقودة وسببت الخطأ
   const togglePerm = (key: string) => {
     setNewUser({
       ...newUser,
@@ -73,7 +74,6 @@ export default function Settings() {
   };
 
   const exportBackup = () => {
-    // 💡 تحديث: شملنا جميع جداول البيانات الجديدة لضمان أمان النظام بالكامل
     const data = {
       settings: s, 
       users: s.users,
@@ -83,6 +83,8 @@ export default function Settings() {
       finance: JSON.parse(localStorage.getItem('finance-transactions') || '[]'),
       exams: JSON.parse(localStorage.getItem('exams-data') || '[]'),
       attendance: JSON.parse(localStorage.getItem('attendance-data') || '{}'),
+      // ✅ حفظ بيانات الأرشيف أيضاً في النسخة الاحتياطية
+      archive: JSON.parse(localStorage.getItem('archive-data') || '[]'),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -98,8 +100,6 @@ export default function Settings() {
     reader.onload = (event: any) => {
       try {
         const data = JSON.parse(event.target.result);
-        
-        // 💡 تحديث: استعادة شاملة لكل أقسام النظام
         if (data.users) localStorage.setItem('edu_users', JSON.stringify(data.users));
         if (data.students) localStorage.setItem('students-data', JSON.stringify(data.students));
         if (data.groups) localStorage.setItem('groups-data', JSON.stringify(data.groups));
@@ -107,6 +107,7 @@ export default function Settings() {
         if (data.finance) localStorage.setItem('finance-transactions', JSON.stringify(data.finance));
         if (data.exams) localStorage.setItem('exams-data', JSON.stringify(data.exams));
         if (data.attendance) localStorage.setItem('attendance-data', JSON.stringify(data.attendance));
+        if (data.archive) localStorage.setItem('archive-data', JSON.stringify(data.archive));
         if (data.settings) localStorage.setItem('office_settings', JSON.stringify({name: data.settings.name, owner: data.settings.owner}));
 
         toast.success('تمت استعادة كافة البيانات بنجاح');
@@ -116,27 +117,16 @@ export default function Settings() {
     reader.readAsText(file);
   };
 
-  // دالة ضبط مصنع: حذف جميع البيانات من localStorage وإعادة تحميل الصفحة
   const resetFactory = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في ضبط مصنع؟ سيتم حذف جميع البيانات نهائياً ولا يمكن التراجع عن هذا الإجراء.')) {
-      // حذف جميع البيانات المخزنة
-      localStorage.removeItem('office_settings');
-      localStorage.removeItem('edu_users');
-      localStorage.removeItem('students-data');
-      localStorage.removeItem('groups-data');
-      localStorage.removeItem('teachers-data');
-      localStorage.removeItem('finance-transactions');
-      localStorage.removeItem('exams-data');
-      localStorage.removeItem('attendance-data');
-      
-      toast.success('تم ضبط المصنع بنجاح. سيتم إعادة تحميل الصفحة.');
+    if (window.confirm('هل أنت متأكد من رغبتك في ضبط مصنع؟ سيتم حذف جميع البيانات نهائياً.')) {
+      localStorage.clear(); // اختصار لحذف كل شيء
+      toast.success('تم ضبط المصنع بنجاح.');
       setTimeout(() => window.location.reload(), 1000);
     }
   };
 
   return (
     <div className="p-4 space-y-4 text-right font-cairo animate-in fade-in duration-500" dir="rtl">
-      {/* Header المصغر */}
       <div className="bg-white px-6 py-4 rounded-3xl shadow-sm border-r-4 border-primary flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary"><SetIcon className="w-5 h-5" /></div>
@@ -175,30 +165,30 @@ export default function Settings() {
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 justify-center">
                   <p className="w-full text-center text-[10px] font-black text-slate-400 mb-1">صلاحيات المساعد:</p>
                   {Object.keys(newUser.permissions).map((p) => {
-  // قاموس لتحويل مفاتيح الكود لأسماء عربية
-  const labels: any = {
-    students: 'الطلاب',
-    teachers: 'المدرسين',
-    groups: 'المجموعات',
-    attendance: 'تسجيل الحضور',
-    exams: 'الامتحانات',
-    finance: 'الحسابات المادية',
-    settings: 'الإعدادات'
-  };
+                    const labels: any = {
+                      students: 'الطلاب',
+                      teachers: 'المدرسين',
+                      groups: 'المجموعات',
+                      attendance: 'تسجيل الحضور',
+                      exams: 'الامتحانات',
+                      archive: 'الأرشيف', // ✅ تمت إضافة الترجمة العربية للأرشيف
+                      finance: 'الحسابات المادية',
+                      settings: 'الإعدادات'
+                    };
 
-  return (
-    <button 
-      key={p} 
-      onClick={() => togglePerm(p)} 
-      className={cn(
-        "px-4 py-1.5 rounded-full text-[10px] font-black border-2 transition-all cursor-pointer", 
-        (newUser.permissions as any)[p] ? "bg-primary border-primary text-white" : "bg-white border-slate-200 text-slate-400"
-      )}
-    >
-      {labels[p] || p}
-    </button>
-  );
-})}
+                    return (
+                      <button 
+                        key={p} 
+                        onClick={() => togglePerm(p)} 
+                        className={cn(
+                          "px-4 py-1.5 rounded-full text-[10px] font-black border-2 transition-all cursor-pointer", 
+                          (newUser.permissions as any)[p] ? "bg-primary border-primary text-white" : "bg-white border-slate-200 text-slate-400"
+                        )}
+                      >
+                        {labels[p] || p}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               <button onClick={addUser} className="w-full bg-slate-800 text-white py-2.5 rounded-lg font-black text-[11px] border-none cursor-pointer hover:bg-primary transition-all">إضافة الحساب</button>
