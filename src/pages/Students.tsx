@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Barcode from "react-barcode";
-import { QrCode } from "lucide-react"; // أيقونة العرض
+import { QrCode, Users } from "lucide-react"; // أيقونة العرض
 import { Plus, Search, MoreHorizontal, Eye, Edit, Trash2, Phone, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
 import { Archive, Trash } from "lucide-react";
+
 const GROUPS_KEY = "groups-data";
 // تأكد من هذا السطر في Students.tsx
 const STUDENTS_KEY = "students-data"; 
@@ -88,6 +89,7 @@ export default function Students() {
   const [form, setForm] = useState(emptyForm);
   const [stageFilter, setStageFilter] = useState("all");
   const [gradeFilter, setGradeFilter] = useState("all");
+  const [viewingStudent, setViewingStudent] = useState<any>(null);
   useEffect(() => { 
     const s = JSON.parse(localStorage.getItem(STUDENTS_KEY) || "[]"); 
     // بنعرض فقط الطلاب اللي مش متأرشفين في الصفحة دي
@@ -283,29 +285,39 @@ useEffect(() => {
                 </div>
               </div>
 
-              <div className="col-span-2 space-y-3 border-t pt-4">
-                <Label className="font-bold text-lg text-slate-700">تحديد المجموعات المشترك بها:</Label>
-                <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto">
-                  {groups.map((g: any) => (
-                    <div key={g.id} className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border hover:border-primary transition-colors cursor-pointer">
-                      <Checkbox 
-                        id={`g-${g.id}`} 
-                        checked={form.enrolledGroups.includes(g.name)}
-                        onCheckedChange={(checked) => {
-                          const updated = checked 
-                            ? [...form.enrolledGroups, g.name]
-                            : form.enrolledGroups.filter(name => name !== g.name);
-                          setForm({ ...form, enrolledGroups: updated });
-                        }}
-                      />
-                      <div className="flex flex-col text-right">
-                        <Label htmlFor={`g-${g.id}`} className="font-bold text-sm cursor-pointer">{g.name}</Label>
-                        <span className="text-[10px] text-muted-foreground">{getGradeLabel(g.stage, g.grade)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* البحث عن اسم المادة من قائمة المدرسين بناءً على اسم المدرس المسجل في المجموعة */}
+<div className="col-span-2 space-y-3 border-t pt-4">
+  <Label className="font-bold text-lg text-slate-700">تحديد المجموعات المشترك بها:</Label>
+  <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+    {groups.map((g: any) => {
+      // 🟢 البحث عن المدرس المسجل للمجموعة لجلب المادة الخاصة به
+      const groupTeacher = teachers.find(t => t.name === g.teacherName);
+      const subject = groupTeacher?.subject || "مادة غير محددة";
+
+      return (
+        <div key={g.id} className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border hover:border-primary transition-colors cursor-pointer">
+          <Checkbox 
+            id={`g-${g.id}`} 
+            checked={form.enrolledGroups.includes(g.name)}
+            onCheckedChange={(checked) => {
+              const updated = checked 
+                ? [...form.enrolledGroups, g.name]
+                : form.enrolledGroups.filter(name => name !== g.name);
+              setForm({ ...form, enrolledGroups: updated });
+            }}
+          />
+          <div className="flex flex-col text-right">
+            <Label htmlFor={`g-${g.id}`} className="font-bold text-sm cursor-pointer">{g.name}</Label>
+            {/* 🟢 عرض المادة بجانب الصف */}
+            <span className="text-[10px] text-muted-foreground font-bold">
+               {subject} - {getGradeLabel(g.stage, g.grade)}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
 
               <div className="col-span-2 flex justify-end gap-2 mt-6 border-t pt-4">
                 <Button variant="outline" className="font-bold" onClick={() => setIsDialogOpen(false)}>إلغاء</Button>
@@ -388,10 +400,66 @@ useEffect(() => {
               </div>
             </TableCell>
 
-            {/* 2. اسم الطالب وهاتفه */}
+            {/* 2. اسم الطالب وهاتفه - مع منطق جلب البيانات المطور */}
             <TableCell>
-              <div className="flex flex-col">
-                <span className="font-bold text-slate-800">{student.name}</span>
+              <div 
+                className="flex flex-col cursor-pointer group"
+                onClick={() => {
+  // 1. جلب البيانات الخام من LocalStorage
+  const allFinance = JSON.parse(localStorage.getItem("finance-transactions") || "[]");
+  const allAttendance = JSON.parse(localStorage.getItem("attendance-data") || "{}");
+  const allTeachers = JSON.parse(localStorage.getItem("teachers-data") || "[]");
+  const allGroups = JSON.parse(localStorage.getItem("groups-data") || "[]");
+
+  // 2. جلب المدفوعات (منطق فلترة متقدم)
+  const studentFinance = allFinance.filter((f: any) => {
+    // التحقق من الكود (كما هو مخزن في صفحة الحسابات)
+    const matchId = f.student && f.student.toString() === student.id.toString();
+    
+    // التحقق من وجود الاسم داخل الوصف (في حال كانت حركة عامة)
+    const matchNameInDesc = f.description && f.description.includes(student.name);
+    
+    return matchId || matchNameInDesc;
+  });
+
+  // 3. جلب المدرسين والمواد المشترك بها (إظهار المواد)
+  // نعتمد هنا على المجموعات (Groups) التي ينتمي إليها الطالب
+  const teachersAndSubjects = student.enrolledGroups.map((groupName: string) => {
+    // ابحث عن المجموعة لجلب اسم المدرس منها
+    const groupInfo = allGroups.find((g: any) => g.name === groupName);
+    // ابحث عن المدرس لجلب المادة
+    const teacherInfo = allTeachers.find((t: any) => t.name === (groupInfo?.teacherName || student.teacherName));
+    
+    return {
+      groupName: groupName,
+      teacherName: groupInfo?.teacherName || student.teacherName || "غير محدد",
+      subject: teacherInfo?.subject || "مادة تعليمية"
+    };
+  });
+
+  // 4. جلب الحضور
+  let studentAttendance: any[] = [];
+  Object.keys(allAttendance).forEach(groupName => {
+    if (allAttendance[groupName][student.id]) {
+      studentAttendance.push({ 
+        group: groupName, 
+        ...allAttendance[groupName][student.id] 
+      });
+    }
+  });
+
+  // تحديث الحالة لعرض المودال
+  setViewingStudent({ 
+    ...student, 
+    studentFinance, 
+    studentAttendance,
+    teachersAndSubjects // هذه المصفوفة ستحتوي على المواد والمدرسين
+  });
+}}
+              >
+                <span className="font-bold text-slate-800 group-hover:text-blue-600 group-hover:underline transition-all">
+                  {student.name}
+                </span>
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Phone size={10} /> {student.phone}
                 </span>
@@ -419,7 +487,7 @@ useEffect(() => {
               </div>
             </TableCell>
 
-            {/* 6. تاريخ الانضمام (الخانة الجديدة) */}
+            {/* 6. تاريخ الانضمام */}
             <TableCell>
               <span className="text-sm font-medium text-slate-600">
                 {student.subscriptionDate || "—"}
@@ -495,7 +563,6 @@ useEffect(() => {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <p className="font-black text-2xl text-slate-900">{qrStudent.name}</p>
               <div className="flex flex-col gap-1">
@@ -505,19 +572,13 @@ useEffect(() => {
                 <p className="text-xs text-slate-500 font-bold">المدرس: {qrStudent.teacherName}</p>
               </div>
             </div>
-
-            <Button 
-              className="w-full font-black bg-slate-900 hover:bg-slate-800 h-11" 
-              onClick={() => window.print()}
-            >
-              طباعة الكارت
-            </Button>
+            <Button className="w-full font-black bg-slate-900 hover:bg-slate-800 h-11" onClick={() => window.print()}>طباعة الكارت</Button>
           </div>
         )}
       </DialogContent>
     </Dialog>
 
-    {/* نافذة تأكيد الحذف أو الأرشفة الاحترافية */}
+    {/* نافذة تأكيد الحذف */}
     <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
       <AlertDialogContent className="text-right" dir="rtl">
         <AlertDialogHeader>
@@ -525,30 +586,108 @@ useEffect(() => {
             <Trash2 className="w-5 h-5 text-red-500" /> حذف الطالب: {itemToDelete?.name}
           </AlertDialogTitle>
           <AlertDialogDescription className="py-4 font-bold text-slate-600">
-            هل تريد نقل الطالب إلى الأرشيف للرجوع إليه لاحقاً، أم حذفه نهائياً من النظام؟
+            هل تريد نقل الطالب إلى الأرشيف للرجوع إليه لاحقاً، أم حذفه نهائياً؟
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex flex-row-reverse justify-start gap-2 border-t pt-4">
-          <Button 
-            variant="default" 
-            onClick={() => archiveItem(itemToDelete)}
-            className="bg-blue-600 hover:bg-blue-700 font-black gap-2"
-          >
+          <Button variant="default" onClick={() => archiveItem(itemToDelete)} className="bg-blue-600 hover:bg-blue-700 font-black gap-2">
             <Archive className="w-4 h-4" /> نقل للأرشيف
           </Button>
-          
-          <Button 
-            variant="ghost" 
-            onClick={() => permanentlyDelete(itemToDelete)}
-            className="text-red-500 hover:bg-red-50 font-black"
-          >
+          <Button variant="ghost" onClick={() => permanentlyDelete(itemToDelete)} className="text-red-500 hover:bg-red-50 font-black">
             حذف نهائي
           </Button>
-
           <AlertDialogCancel className="font-bold border-none">إلغاء</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* نافذة ملف الطالب الشامل */}
+    <Dialog open={!!viewingStudent} onOpenChange={() => setViewingStudent(null)}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogHeader className="border-b pb-4 flex flex-row items-center justify-between">
+          <DialogTitle className="text-2xl font-black flex items-center gap-3">
+            <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <p>{viewingStudent?.name}</p>
+              <p className="text-xs text-slate-500 font-bold tracking-widest uppercase">كود: {viewingStudent?.serial || viewingStudent?.id}</p>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-6 text-right">
+          {/* 1. البيانات والمواد */}
+          <div className="space-y-4">
+            <h3 className="font-black text-blue-600 border-r-4 border-blue-600 pr-2 text-sm text-right">المواد والمدرسين</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {viewingStudent?.teachersAndSubjects?.map((item: any, idx: number) => (
+                <div key={idx} className="bg-green-50 p-2 rounded-lg border border-green-100 flex justify-between items-center">
+                  <div className="flex flex-col items-start">
+                    <span className="text-[10px] text-green-600 font-bold">المادة</span>
+                    <span className="text-xs font-black">{item.subject}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] text-slate-500 font-bold">المدرس</span>
+                    <span className="text-xs font-bold text-slate-700">{item.teacherName}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <h3 className="font-black text-slate-600 border-r-4 border-slate-600 pr-2 text-sm text-right mt-4">بيانات التواصل</h3>
+            <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-2 border">
+               <div className="flex justify-between"><span className="text-slate-500 font-bold">ولي الأمر:</span> <span className="font-black">{viewingStudent?.parentName || '---'}</span></div>
+               <div className="flex justify-between"><span className="text-slate-500 font-bold">هاتف الطوارئ:</span> <span className="font-black">{viewingStudent?.parentPhone || '---'}</span></div>
+            </div>
+          </div>
+
+          {/* 2. سجل الحضور */}
+          <div className="space-y-4">
+            <h3 className="font-black text-amber-600 border-r-4 border-amber-600 pr-2 text-sm text-right">سجل الحضور</h3>
+            <div className="bg-slate-50 rounded-2xl border overflow-hidden">
+              <Table>
+                <TableBody>
+                  {viewingStudent?.studentAttendance?.length > 0 ? viewingStudent.studentAttendance.slice(-5).reverse().map((att: any, i: number) => (
+                    <TableRow key={i} className="text-[10px]">
+                      <TableCell className="font-bold">{att.date}</TableCell>
+                      <TableCell className="text-slate-500 text-center">{att.group}</TableCell>
+                      <TableCell className="text-left">
+                        <Badge variant="outline" className={att.status === 'present' ? "text-green-600 border-green-200" : "text-red-600 border-red-200"}>
+                          {att.status === 'present' ? 'حاضر' : 'غائب'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )) : <TableRow><TableCell className="text-center text-slate-400 py-10 font-bold">لا توجد سجلات</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* 3. السجل المالي */}
+          <div className="space-y-4">
+            <h3 className="font-black text-purple-600 border-r-4 border-purple-600 pr-2 text-sm text-right">المدفوعات المالية</h3>
+            <div className="bg-slate-50 rounded-2xl border overflow-hidden">
+              <Table>
+                <TableBody>
+                  {viewingStudent?.studentFinance?.length > 0 ? viewingStudent.studentFinance.slice(-5).reverse().map((fin: any, i: number) => (
+                    <TableRow key={i} className="text-[10px]">
+                      <TableCell className="font-bold">{fin.date}</TableCell>
+                      <TableCell className="font-black text-purple-700 text-center">{fin.amount} ج</TableCell>
+                      <TableCell className="text-[9px] text-left truncate max-w-[80px]">{fin.description || 'مصاريف'}</TableCell>
+                    </TableRow>
+                  )) : <TableRow><TableCell className="text-center text-slate-400 py-10 font-bold">لا توجد مدفوعات</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </div>
+        
+        <div className="border-t pt-4">
+            <Button className="w-full font-black bg-slate-900 h-11" onClick={() => setViewingStudent(null)}>إغلاق الملف</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
-);
+  );
 }
