@@ -106,7 +106,6 @@ export default function Dashboard() {
           <div>
             <h1 className="text-xl font-black text-slate-800">لوحة التحكم </h1>
             <p className="text-[10px] text-muted-foreground font-bold font-sans">
-              يتم عرض حضور وإيراد اليوم عند اختيار شهر {new Date().getMonth() + 1} فقط
             </p>
           </div>
         </div>
