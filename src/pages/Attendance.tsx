@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom"; // السطر اللي كان ناقص
+import { useLocation } from "react-router-dom";
 import {
   QrCode,
   Check,
@@ -27,9 +27,10 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 export default function Attendance() {
-  const location = useLocation(); // السطر اللي بيقرأ المجموعة المرسلة
+  const location = useLocation();
   const [groups, setGroups] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [allStudents, setAllStudents] = useState<any[]>([]);
@@ -40,12 +41,12 @@ export default function Attendance() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [qrStudent, setQrStudent] = useState<any>(null);
   const [attendanceData, setAttendanceData] = useState<Record<string, any>>({});
-  const todayKey = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
   const scannerBuffer = useRef("");
   const codeReader = useRef(new BrowserMultiFormatReader());
   const controlsRef = useRef<any>(null);
 
-  // 1. تحميل البيانات + الاستقبال التلقائي للمجموعة
   useEffect(() => {
     const g = JSON.parse(localStorage.getItem("groups-data") || "[]");
     const t = JSON.parse(localStorage.getItem("teachers-data") || "[]");
@@ -57,10 +58,8 @@ export default function Attendance() {
     setAllStudents(s); 
     setAttendanceData(savedAtt);
 
-    // لو جاي من صفحة الحصص، اختار المجموعة فوراً
     if (location.state?.selectedGroup) {
       setSelectedGroup(location.state.selectedGroup);
-      // افتراضياً، إذا كانت المجموعة محددة، قم بتعيين المدرس والمرحلة والصف بناءً عليها
       const group = g.find(gr => gr.name === location.state.selectedGroup);
       if (group) {
         setSelectedTeacher(group.teacherName || "");
@@ -83,15 +82,14 @@ export default function Attendance() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [location.state]); // التحديث لو الـ state اتغير
+  }, [location.state]);
 
-  // 2. الكاميرا والسكانر (لم يتم تعديلها)
   const startCamera = async () => {
     setCameraOpen(true);
     try {
       setTimeout(async () => {
         controlsRef.current = await codeReader.current.decodeFromVideoDevice(
-          undefined, // إصلاح: إضافة undefined كأول معامل لاختيار الجهاز الافتراضي
+          undefined,
           "video-feed", 
           (result) => {
             if (result) {
@@ -133,68 +131,80 @@ export default function Attendance() {
   };
 
   const registerAttendance = (studentId: number) => {
-  if (!selectedGroup) return;
+    if (!selectedGroup) return;
 
-  // هيكلة البيانات: [التاريخ][المجموعة][الطالب]
-  const allData = { ...attendanceData };
-  if (!allData[todayKey]) allData[todayKey] = {};
-  if (!allData[todayKey][selectedGroup]) allData[todayKey][selectedGroup] = {};
+    const allData = { ...attendanceData };
+    if (!allData[selectedDate]) allData[selectedDate] = {};
+    if (!allData[selectedDate][selectedGroup]) allData[selectedDate][selectedGroup] = {};
 
-  const currentGroupAtt = allData[todayKey][selectedGroup];
-  if (currentGroupAtt[studentId]) return;
+    const currentGroupAtt = allData[selectedDate][selectedGroup];
+    if (currentGroupAtt[studentId]) return;
 
-  const timeNow = new Date().toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' });
-  
-  // تحديث البيانات
-  allData[todayKey][selectedGroup][studentId] = { 
-    status: "present", 
-    time: timeNow,
-    date: todayKey // إضافة التاريخ داخل بيانات الطالب أيضاً للداش بورد
+    const timeNow = new Date().toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' });
+    
+    allData[selectedDate][selectedGroup][studentId] = { 
+      status: "present", 
+      time: timeNow,
+      date: selectedDate
+    };
+
+    setAttendanceData(allData);
+    localStorage.setItem("attendance-data", JSON.stringify(allData));
+    new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play().catch(() => {});
   };
-
-  setAttendanceData(allData);
-  localStorage.setItem("attendance-data", JSON.stringify(allData));
-  new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play().catch(() => {});
-};
 
   const removeAttendance = (studentId: number) => {
     if (!selectedGroup) return;
 
-    // 1. أخذ نسخة من البيانات الحالية
     const allData = { ...attendanceData };
 
-    // 2. التحقق من وجود بيانات لهذا اليوم وهذه المجموعة
-    if (allData[todayKey] && allData[todayKey][selectedGroup]) {
-      
-      // 3. حذف الطالب من النسخة
-      const updatedGroupAtt = { ...allData[todayKey][selectedGroup] };
+    if (allData[selectedDate] && allData[selectedDate][selectedGroup]) {
+      const updatedGroupAtt = { ...allData[selectedDate][selectedGroup] };
       delete updatedGroupAtt[studentId];
 
-      // 4. تحديث الكائن الكبير
-      allData[todayKey][selectedGroup] = updatedGroupAtt;
+      allData[selectedDate][selectedGroup] = updatedGroupAtt;
 
-      // 5. حفظ وتحديث الحالة
       setAttendanceData(allData);
       localStorage.setItem("attendance-data", JSON.stringify(allData));
       
-      // صوت خفيف للحذف (اختياري)
-      console.log(`Student ${studentId} removed from ${selectedGroup} on ${todayKey}`);
+      console.log(`Student ${studentId} removed from ${selectedGroup} on ${selectedDate}`);
     }
   };
 
-  // استخراج الخيارات بناءً على قاعدة صفحة المجموعات: المدرس يحدد المرحلة والصف، ثم المجموعات من groups
-  const teacherOptions = teachers.map(t => ({ value: t.name, label: t.name })); // افتراضاً t.name
-  const selectedTeacherData = teachers.find(t => t.name === selectedTeacher);
-  const stageOptions = selectedTeacherData ? [{ value: selectedTeacherData.stage, label: selectedTeacherData.stage === "primary" ? "ابتدائي" : selectedTeacherData.stage === "middle" ? "إعدادي" : selectedTeacherData.stage === "high" ? "ثانوي" : selectedTeacherData.stage }] : [];
-  const classOptions = selectedTeacherData ? [{ value: selectedTeacherData.grade?.toString(), label: `الصف ${selectedTeacherData.grade} ${selectedTeacherData.stage === "primary" ? "ابتدائي" : selectedTeacherData.stage === "middle" ? "إعدادي" : selectedTeacherData.stage === "high" ? "ثانوي" : ""}` }] : [];
-  const availableGroups = selectedClass ? groups.filter(g => g.teacherName === selectedTeacher && g.stage === selectedStage && g.grade?.toString() === selectedClass) : [];
+  const teacherOptions = teachers.map(t => ({ value: t.name, label: t.name }));
 
-  // --- المنطقة الحساسة: تعريف المتغيرات لكل الصفحة ---
+  const stageOptions = [
+    { value: "primary", label: "ابتدائي" },
+    { value: "middle", label: "إعدادي" },
+    { value: "high", label: "ثانوي" },
+  ];
+
+  const getGradesForStage = (stage: string) => {
+    if (stage === "primary") return [1, 2, 3, 4, 5, 6];
+    if (stage === "middle" || stage === "high") return [1, 2, 3];
+    return [];
+  };
+
+  const classOptions = selectedStage 
+    ? getGradesForStage(selectedStage).map(grade => ({
+        value: grade.toString(),
+        label: `الصف ${
+          ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس"][grade - 1]
+        } ${stageOptions.find(s => s.value === selectedStage)?.label || ""}`
+      }))
+    : [];
+
+  const availableGroups = groups.filter(g => 
+    g.teacherName === selectedTeacher && 
+    g.stage === selectedStage && 
+    g.grade?.toString() === selectedClass
+  );
+
   const filteredStudents = allStudents.filter(st => 
     selectedGroup && st.enrolledGroups?.includes(selectedGroup)
   );
 
-const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // ------------------------------------------------
+  const currentAtt = attendanceData[selectedDate]?.[selectedGroup] || {};
 
   return (
     <div className="space-y-4 p-1">
@@ -213,7 +223,7 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
         <div>
           <Label className="font-black mb-1 block">اختر المدرس</Label>
           <Select value={selectedTeacher} onValueChange={(value) => {
@@ -255,7 +265,7 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
           </Select>
         </div>
         <div>
-          <Label className="font-black mb-1 block">اختر المجموعة الدراسية</Label>
+          <Label className="font-black mb-1 block">اختر المجموعة</Label>
           <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={!selectedClass}>
             <SelectTrigger className="h-10 font-bold"><SelectValue placeholder="اختر المجموعة" /></SelectTrigger>
             <SelectContent>
@@ -263,9 +273,19 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
             </SelectContent>
           </Select>
         </div>
-        <div className="bg-muted/50 border rounded-lg flex items-center justify-center font-black gap-1 h-10 mt-auto">
-          <Calendar className="w-3 h-3 text-primary" /> {new Date().toLocaleDateString("ar-EG")}
+
+        <div>
+          <Label className="font-black mb-1 block">التاريخ</Label>
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="h-10 font-medium"
+          />
         </div>
+
+        {/* تم حذف البادج الذي يعرض التاريخ مرة أخرى */}
+        <div></div>
       </div>
 
       {selectedGroup && (
@@ -277,7 +297,11 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
           </div>
 
           <Card className="shadow-xl border-none overflow-hidden">
-            <CardHeader className="bg-slate-900 text-white py-2"><CardTitle className="font-black text-sm">سجل الحضور</CardTitle></CardHeader>
+            <CardHeader className="bg-slate-900 text-white py-2">
+              <CardTitle className="font-black text-sm">
+                سجل الحضور – {new Date(selectedDate).toLocaleDateString("ar-EG", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y max-h-[400px] overflow-y-auto">
                 {filteredStudents.length === 0 ? (
@@ -293,24 +317,31 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
                           </div>
                           <div>
                             <p className="font-black text-base">{student.name}</p>
-{att && (
-  <div>
-    <p className="text-xs font-bold text-green-600">حضر الساعة {att.time}</p>
-    {/* إضافة تاريخ اليوم تحت الساعة */}
-    <p className="text-[10px] text-slate-400 font-medium">بتاريخ: {todayKey}</p>
-  </div>
-)}                          </div>
+                            {att && (
+                              <div>
+                                <p className="text-xs font-bold text-green-600">
+                                  حضر الساعة {att.time} بتاريخ {att.date}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="flex gap-1">
                           {att ? (
                             <div className="flex items-center gap-1">
                               <Badge className="bg-green-100 text-green-700 border-none font-black">حاضر</Badge>
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-red-400" onClick={() => removeAttendance(student.id)}><Trash2 className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-red-400" onClick={() => removeAttendance(student.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
                             </div>
                           ) : (
-                            <Button className="font-black px-4 rounded-lg bg-primary" onClick={() => registerAttendance(student.id)}>تحضير</Button>
+                            <Button className="font-black px-4 rounded-lg bg-primary" onClick={() => registerAttendance(student.id)}>
+                              تحضير
+                            </Button>
                           )}
-                          <Button size="icon" variant="outline" className="rounded-lg" onClick={() => setQrStudent(student)}><QrCode className="w-3 h-3" /></Button>
+                          <Button size="icon" variant="outline" className="rounded-lg" onClick={() => setQrStudent(student)}>
+                            <QrCode className="w-3 h-3" />
+                          </Button>
                         </div>
                       </div>
                     );
@@ -327,7 +358,9 @@ const currentAtt = attendanceData[todayKey]?.[selectedGroup] || {};  // --------
         <DialogContent className="p-0 overflow-hidden sm:max-w-md bg-black border-none">
           <div className="relative aspect-video flex items-center justify-center bg-black">
             <video id="video-feed" className="w-full h-full object-cover" />
-            <Button variant="destructive" size="icon" className="absolute top-3 right-3 rounded-full z-50" onClick={closeCamera}><X /></Button>
+            <Button variant="destructive" size="icon" className="absolute top-3 right-3 rounded-full z-50" onClick={closeCamera}>
+              <X />
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

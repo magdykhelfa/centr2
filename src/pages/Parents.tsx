@@ -120,23 +120,48 @@ export default function Parents() {
     }
   }, [selectedGroup]); // التحديث يحصل لما المجموعة تتغير
 
-  // 3. دوال مساعدة للفلترة
-  const getStageLabel = (stage: string) => {
-    const labels: any = { primary: "ابتدائي", middle: "إعدادي", high: "ثانوي" };
-    return labels[stage] || stage;
+  // --- منطق استخراج الخيارات الموحد ---
+
+  // 1. قائمة المدرسين
+  const teacherOptions = teachers.map(t => ({ value: t.name, label: t.name }));
+
+  // 2. قائمة المراحل الكاملة (تم إرجاع الاسم stageOptions ليتوافق مع الـ JSX عندك)
+  const stageOptions = [
+    { value: "primary", label: "ابتدائي" },
+    { value: "middle", label: "إعدادي" },
+    { value: "high", label: "ثانوي" },
+  ];
+
+  // 3. وظيفة جلب الصفوف بناءً على المرحلة
+  const getGradesForStage = (stage: string) => {
+    if (stage === "primary") return [1, 2, 3, 4, 5, 6];
+    if (stage === "middle" || stage === "high") return [1, 2, 3];
+    return [];
   };
 
-  const selectedTeacherData = teachers.find(t => t.name === selectedTeacher);
-  const stageOptions = selectedTeacherData ? [{ value: selectedTeacherData.stage, label: getStageLabel(selectedTeacherData.stage) }] : [];
-  const classOptions = selectedTeacherData ? [{ value: selectedTeacherData.grade?.toString(), label: `الصف ${selectedTeacherData.grade} ${getStageLabel(selectedTeacherData.stage)}` }] : [];
-  const availableGroups = selectedClass ? groups.filter(g => g.teacherName === selectedTeacher && g.stage === selectedStage && g.grade?.toString() === selectedClass) : [];
+  // 4. قائمة الصفوف (classOptions)
+  const classOptions = selectedStage 
+    ? getGradesForStage(selectedStage).map(grade => ({
+        value: grade.toString(),
+        label: `الصف ${
+          ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس"][grade - 1]
+        } ${stageOptions.find(s => s.value === selectedStage)?.label || ""}`
+      }))
+    : [];
 
-  // تصفية نهائية للبحث بالاسم داخل النتائج
+  // 5. تصفية المجموعات
+  const availableGroups = groups.filter(g => 
+    g.teacherName === selectedTeacher && 
+    g.stage === selectedStage && 
+    g.grade?.toString() === selectedClass
+  );
+
+  // تصفية نهائية للبحث
   const finalDisplay = parents.filter(p => 
     p.name.includes(searchTerm) || p.phone.includes(searchTerm) || p.students.some((s:any) => s.name.includes(searchTerm))
   );
   
-  // 🟢 دالة إرسال تقرير الواتساب التي قمت بإضافتها لك
+  // 🟢 دالة إرسال تقرير الواتساب
   const sendWhatsAppReport = (parent: any) => {
     const date = new Date().toLocaleDateString("ar-EG");
     let message = `*تقرير متابعة الطالب - بتاريخ ${date}*\n\n`;
@@ -153,10 +178,8 @@ export default function Parents() {
 
     message += `\n*نرجو الاهتمام والمتابعة.. مع تحياتنا.*`;
 
-    // تنسيق الرقم (إضافة كود مصر 2 إذا بدأ الرقم بـ 0)
     const cleanPhone = parent.phone.startsWith('0') ? '2' + parent.phone : parent.phone;
     const whatsappUrl = `https://wa.me/${cleanPhone.replace(/\s+/g, '')}?text=${encodeURIComponent(message)}`;
-    
     window.open(whatsappUrl, "_blank");
   };
   
@@ -168,13 +191,15 @@ export default function Parents() {
         <p className="text-muted-foreground text-sm font-bold">متابعة الأداء الأكاديمي والمالي</p>
       </div>
 
-      {/* قسم الفلترة الجديد - مطابق لصفحة الحضور */}
+      {/* قسم الفلترة الجديد - مرونة كاملة في الاختيار */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl shadow-sm border">
+        {/* 1. المدرس */}
         <div>
           <Label className="font-black mb-1 block text-xs">المدرس</Label>
           <Select value={selectedTeacher} onValueChange={(value) => {
             setSelectedTeacher(value);
             const t = teachers.find(teach => teach.name === value);
+            // تعيين تلقائي للمرحلة والصف الخاص بالمدرس
             setSelectedStage(t?.stage || "");
             setSelectedClass(t?.grade?.toString() || "");
             setSelectedGroup("");
@@ -186,19 +211,37 @@ export default function Parents() {
           </Select>
         </div>
 
+        {/* 2. المرحلة - الآن تعرض كل الخيارات */}
         <div>
           <Label className="font-black mb-1 block text-xs">المرحلة</Label>
-          <Select value={selectedStage} disabled={!selectedTeacher}>
+          <Select 
+            value={selectedStage} 
+            onValueChange={(value) => {
+              setSelectedStage(value);
+              setSelectedClass(""); 
+              setSelectedGroup("");
+            }} 
+            disabled={!selectedTeacher}
+          >
             <SelectTrigger className="font-bold h-10"><SelectValue placeholder="المرحلة" /></SelectTrigger>
             <SelectContent>
+              {/* تأكد أن هذا المتغير stageOptions معرف بالأعلى كمصفوفة [primary, middle, high] */}
               {stageOptions.map(s => <SelectItem key={s.value} value={s.value} className="font-bold">{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
+        {/* 3. الصف - الآن يعرض كل الصفوف المتاحة للمرحلة */}
         <div>
           <Label className="font-black mb-1 block text-xs">الصف</Label>
-          <Select value={selectedClass} disabled={!selectedStage}>
+          <Select 
+            value={selectedClass} 
+            onValueChange={(value) => {
+              setSelectedClass(value);
+              setSelectedGroup("");
+            }} 
+            disabled={!selectedStage}
+          >
             <SelectTrigger className="font-bold h-10"><SelectValue placeholder="الصف" /></SelectTrigger>
             <SelectContent>
               {classOptions.map(c => <SelectItem key={c.value} value={c.value} className="font-bold">{c.label}</SelectItem>)}
@@ -206,6 +249,7 @@ export default function Parents() {
           </Select>
         </div>
 
+        {/* 4. المجموعة */}
         <div>
           <Label className="font-black mb-1 block text-xs text-blue-600">المجموعة الدراسية</Label>
           <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={!selectedClass}>

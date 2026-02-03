@@ -16,27 +16,28 @@ import { Badge } from "@/components/ui/badge";
 const FINANCE_KEY = "finance-transactions";
 const STUDENTS_KEY = "students-data";
 const TEACHERS_KEY = "teachers-data";
+const USERS_KEY = "edu_users";
 
 export default function Finance() {
   // --- States ---
   const [transactions, setTransactions] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStudentSettingsOpen, setIsStudentSettingsOpen] = useState(false);
   const [isTeacherFinanceOpen, setIsTeacherFinanceOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [viewDate, setViewDate] = useState({ 
-    month: new Date().getMonth() + 1, 
-    year: new Date().getFullYear() 
-  });
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [receiverFilter, setReceiverFilter] = useState('all');
+
   // Student Form State
   const [studentForm, setStudentForm] = useState({
     id: '', name: '', subscriptionType: 'per_lesson', packagePrice: 0,
     discountPercentage: 0, selectedSubjects: [] as any[], 
-    isPackageFree: false, lastUpdateDate: '', notes: '', manualDebt: 0 
+    isPackageFree: false, lastUpdateDate: '', notes: '', manualDebt: 0,
+    receiver: ''
   });
 
   // Teacher Form State
@@ -57,6 +58,7 @@ export default function Finance() {
       setTransactions(JSON.parse(localStorage.getItem(FINANCE_KEY) || "[]"));
       setStudents(JSON.parse(localStorage.getItem(STUDENTS_KEY) || "[]"));
       setTeachers(JSON.parse(localStorage.getItem(TEACHERS_KEY) || "[]"));
+      setUsers(JSON.parse(localStorage.getItem(USERS_KEY) || "[]"));
     };
     loadData();
   }, []);
@@ -110,13 +112,10 @@ export default function Finance() {
   };
 
   const handleDeleteTransaction = (id: number) => {
-    // 1. العثور على العملية قبل حذفها لمعرفة هل هي تابعة لطالب أم لا
     const transactionToDelete = transactions.find(t => t.id === id);
     
-    // 2. حذف العملية من القائمة
     const updatedTx = transactions.filter(t => t.id !== id);
     
-    // 3. إذا كانت العملية مرتبطة بطالب، نقوم بتحديث بيانات الطالب (اختياري لضمان تحديث الـ UI)
     let updatedStudents = [...students];
     if (transactionToDelete && transactionToDelete.student) {
       updatedStudents = students.map(s => 
@@ -129,7 +128,6 @@ export default function Finance() {
       toast.error('تم حذف العملية من الخزينة');
     }
 
-    // 4. حفظ البيانات الجديدة
     setTransactions(updatedTx);
     localStorage.setItem(FINANCE_KEY, JSON.stringify(updatedTx));
     
@@ -149,12 +147,13 @@ export default function Finance() {
       updatedTx.push({
         id: Date.now(), type: 'income', amount: paidAmount,
         description: `سداد اشتراك - طالب: ${studentForm.name}`,
-        date: currentDate, student: studentForm.id, category: 'درس'
+        date: selectedDate, student: studentForm.id, category: 'درس',
+        receiver: studentForm.receiver
       });
     }
 
     const updatedSt = students.map(s => 
-      s.id.toString() === studentForm.id ? { ...s, ...studentForm, lastUpdateDate: currentDate } : s
+      s.id.toString() === studentForm.id ? { ...s, ...studentForm, lastUpdateDate: selectedDate } : s
     );
     
     saveData(updatedTx, updatedSt);
@@ -170,7 +169,7 @@ export default function Finance() {
     const newTx = {
       id: Date.now(), type: 'expense', amount,
       description: `صرف مستحقات مدرس: ${teacherFinForm.name} (${teacherFinForm.notes || 'بدون ملاحظات'})`,
-      date: currentDate, category: 'رواتب'
+      date: selectedDate, category: 'رواتب'
     };
     
     saveData([...transactions, newTx]);
@@ -193,15 +192,16 @@ export default function Finance() {
     });
   };
 
-  // 1. دي "المصفاة" اللي بتجيب حركات الشهر المختار بس
-const filteredTransactions = transactions.filter(t => {
-  const tDate = new Date(t.date);
-  return (tDate.getMonth() + 1) === viewDate.month && tDate.getFullYear() === viewDate.year;
-});
+  // فلترة حسب اليوم المختار
+  const filteredTransactions = transactions.filter(t => t.date === selectedDate);
 
-// 2. هنا بنحسب الإجمالي من الحركات المصفاة (مش من كل الحركات)
-const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  const displayedTransactions = receiverFilter === 'all' 
+    ? filteredTransactions 
+    : filteredTransactions.filter(t => t.receiver === receiverFilter);
+
+  const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
   return (
     <div className="p-6 space-y-6" dir="rtl">
       {/* Header Section */}
@@ -211,35 +211,24 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
           <p className="text-muted-foreground font-bold text-xs uppercase opacity-70">التحصيل، الرواتب، وحركة الخزينة</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* زراير اختيار الشهر والسنة */}
-<div className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-dashed border-slate-300">
-  <select 
-    className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold text-blue-600 outline-none"
-    value={viewDate.month} 
-    onChange={(e) => setViewDate({...viewDate, month: Number(e.target.value)})}
-  >
-    {[...Array(12)].map((_, i) => (
-      <option key={i+1} value={i+1}>شهر {i+1}</option>
-    ))}
-  </select>
+          {/* اختيار التاريخ */}
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-dashed border-slate-300">
+            <span className="text-sm font-bold text-slate-700">التاريخ:</span>
+            <Input 
+              type="date" 
+              value={selectedDate} 
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-44"
+            />
+          </div>
 
-  <select 
-    className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold text-slate-600 outline-none"
-    value={viewDate.year} 
-    onChange={(e) => setViewDate({...viewDate, year: Number(e.target.value)})}
-  >
-    {[2025, 2026, 2027].map(y => (
-      <option key={y} value={y}>{y}</option>
-    ))}
-  </select>
-</div>
           <Button variant="outline" className="gap-2 font-black border-orange-600 text-orange-600 hover:bg-orange-50" onClick={() => setIsTeacherFinanceOpen(true)}>
             <Wallet className="w-4 h-4" /> حساب مدرس
           </Button>
           <Button variant="outline" className="gap-2 font-black border-blue-600 text-blue-600 hover:bg-blue-50" onClick={() => setIsStudentSettingsOpen(true)}>
             <Users className="w-4 h-4" /> تحصيل طالب
           </Button>
-          <Button className="gap-2 font-black bg-slate-900 shadow-lg" onClick={() => {setEditingTransaction(null); setForm({ type: 'income', amount: 0, description: '', date: currentDate, student: '', category: 'general' }); setIsDialogOpen(true);}}>
+          <Button className="gap-2 font-black bg-slate-900 shadow-lg" onClick={() => {setEditingTransaction(null); setForm({ type: 'income', amount: 0, description: '', date: selectedDate, student: '', category: 'general' }); setIsDialogOpen(true);}}>
             <Plus className="w-4 h-4" /> حركة خزينة
           </Button>
         </div>
@@ -247,9 +236,9 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard value={totalIncome} label="إجمالي المقبوضات" type="income" icon={<ArrowUpCircle className="w-5 h-5" />} />
-        <SummaryCard value={totalExpenses} label="إجمالي المصروفات" type="expense" icon={<ArrowDownCircle className="w-5 h-5" />} />
-        <SummaryCard value={totalIncome - totalExpenses} label="صافي الخزينة" type="profit" icon={<Receipt className="w-5 h-5" />} />
+        <SummaryCard value={totalIncome} label="إجمالي المقبوضات (اليوم)" type="income" icon={<ArrowUpCircle className="w-5 h-5" />} />
+        <SummaryCard value={totalExpenses} label="إجمالي المصروفات (اليوم)" type="expense" icon={<ArrowDownCircle className="w-5 h-5" />} />
+        <SummaryCard value={totalIncome - totalExpenses} label="صافي الخزينة (اليوم)" type="profit" icon={<Receipt className="w-5 h-5" />} />
       </div>
 
       {/* Main Tabs */}
@@ -274,7 +263,8 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
               </TableHeader>
               <TableBody>
                 {students.map((s) => {
-                    const paid = filteredTransactions.filter(t => t.type === 'income' && t.student === s.id.toString()).reduce((sum, t) => sum + t.amount, 0);                  const required = calculateStudentRequired(s);
+                    const paid = transactions.filter(t => t.type === 'income' && t.student === s.id.toString()).reduce((sum, t) => sum + t.amount, 0);
+                  const required = calculateStudentRequired(s);
                   return (
                     <TableRow key={s.id}>
                       <TableCell className="font-bold">{s.name}</TableCell>
@@ -320,20 +310,40 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
         </TabsContent>
 
         <TabsContent value="transactions">
-           <Card className="border-none shadow-sm overflow-hidden">
+          <div className="flex justify-end mb-4">
+            <select 
+              className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold text-blue-600 outline-none"
+              value={receiverFilter} 
+              onChange={(e) => setReceiverFilter(e.target.value)}
+            >
+              <option value="all">جميع المستلمين</option>
+              {users
+                .filter((u: any) => u.permissions?.finance)
+                .map((u: any) => (
+                  <option key={u.id} value={u.id.toString()}>
+                    {u.name}
+                  </option>
+                ))
+              }
+            </select>
+          </div>
+
+          <Card className="border-none shadow-sm overflow-hidden">
             <Table className="w-full text-right" dir="rtl">
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="text-right">التاريخ</TableHead>
+                  <TableHead className="text-right">المستلم</TableHead>
                   <TableHead className="text-right">البيان</TableHead>
                   <TableHead className="text-right">المبلغ</TableHead>
                   <TableHead className="text-center">إجراء</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransactions.slice().reverse().map((t) => (
+                {displayedTransactions.slice().reverse().map((t) => (
                   <TableRow key={t.id}>
                     <TableCell className="text-xs font-bold">{t.date}</TableCell>
+                    <TableCell className="font-medium">{t.receiver ? users.find((u: any) => u.id.toString() === t.receiver)?.name || '-' : '-'}</TableCell>
                     <TableCell className="font-medium">{t.description}</TableCell>
                     <TableCell className={`font-bold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.amount} ج</TableCell>
                     <TableCell className="flex justify-center gap-2">
@@ -348,7 +358,7 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
         </TabsContent>
       </Tabs>
 
-      {/* --- Dialog: تحصيل اشتراك طالب --- */}
+      {/* Dialog: تحصيل اشتراك طالب - كامل بدون حذف */}
       <Dialog open={isStudentSettingsOpen} onOpenChange={setIsStudentSettingsOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto text-right p-4" dir="rtl">
           <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-blue-600"><UserCheck /> تحصيل رسوم الطالب</DialogTitle></DialogHeader>
@@ -365,7 +375,7 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
             </div>
 
             <div className="md:col-span-9 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-xl border shadow-sm items-end">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-xl border shadow-sm items-end">
                  <div className="space-y-1"><Label className="font-bold text-xs">نظام المحاسبة</Label>
                     <Select value={studentForm.subscriptionType} onValueChange={(v) => setStudentForm({...studentForm, subscriptionType: v})}>
                         <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
@@ -381,6 +391,16 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
                  </div>
                  <div className="space-y-1"><Label className="font-bold text-xs">ملاحظات التحصيل</Label>
                     <Input value={studentForm.notes} onChange={(e) => setStudentForm({...studentForm, notes: e.target.value})} className="h-10 text-xs" />
+                 </div>
+                 <div className="space-y-1"><Label className="font-bold text-xs">المستلم</Label>
+                    <Select value={studentForm.receiver} onValueChange={(v) => setStudentForm({...studentForm, receiver: v})}>
+                        <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {users.map((u: any) => (
+                              <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                  </div>
               </div>
 
@@ -454,7 +474,7 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
         </DialogContent>
       </Dialog>
 
-      {/* --- Dialog: حساب المدرس --- */}
+      {/* Dialog: حساب المدرس - كامل بدون حذف */}
       <Dialog open={isTeacherFinanceOpen} onOpenChange={setIsTeacherFinanceOpen}>
         <DialogContent className="max-w-4xl text-right" dir="rtl">
           <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-orange-600"><Wallet /> تسوية وصرف مستحقات المدرس</DialogTitle></DialogHeader>
@@ -512,7 +532,7 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
         </DialogContent>
       </Dialog>
 
-      {/* --- Dialog: إضافة حركة خزينة عامة --- --- */}
+      {/* Dialog: إضافة حركة خزينة عامة */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="text-right" dir="rtl">
           <DialogHeader><DialogTitle className="font-black">تسجيل حركة مالية</DialogTitle></DialogHeader>
@@ -536,7 +556,6 @@ const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').red
   );
 }
 
-// --- Helper Components ---
 function SummaryCard({ value, label, type, icon }: { value: number, label: string, type: 'income' | 'expense' | 'profit', icon: any }) {
   const colors = { 
     income: 'bg-green-50 text-green-700 border-green-100', 
