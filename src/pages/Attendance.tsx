@@ -206,6 +206,10 @@ export default function Attendance() {
 
   const currentAtt = attendanceData[selectedDate]?.[selectedGroup] || {};
 
+  function getGradeLabel(stage: any, grade: any): import("react").ReactNode {
+    throw new Error("Function not implemented.");
+  }
+
   return (
     <div className="space-y-4 p-1">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -366,31 +370,39 @@ export default function Attendance() {
       </Dialog>
 
       {/* مودال كارت الطالب */}
-      <Dialog open={!!qrStudent} onOpenChange={() => setQrStudent(null)}>
-        <DialogContent className="sm:max-w-[500px] text-center p-6">
-          {qrStudent && (
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex gap-3">
-                <div className="flex flex-col items-center gap-1">
-                  <Label className="font-bold text-xs">QR Code للـ ID (للكاميرا)</Label>
-                  <QRCodeCanvas size={120} value={qrStudent.id.toString()} />
+      {/* مودال كارت الطالب */}
+          <Dialog open={!!qrStudent} onOpenChange={() => setQrStudent(null)}>
+            <DialogContent className="sm:max-w-[500px] text-center p-6">
+              {qrStudent && (
+                <div className="flex flex-col items-center gap-4" dir="rtl">
+                  <div className="flex gap-3 bg-white p-4 rounded-xl border shadow-sm">
+                    <div className="flex flex-col items-center gap-1">
+                      <Label className="font-bold text-[10px] text-slate-500 uppercase">QR Code (ID)</Label>
+                      <QRCodeCanvas size={120} value={qrStudent.id.toString()} />
+                    </div>
+                    <div className="flex flex-col items-center gap-1 border-r pr-4 border-slate-100">
+                      <Label className="font-bold text-[10px] text-slate-500 uppercase">Barcode (Serial)</Label>
+                      <Barcode 
+                        value={qrStudent.serial || `ST-${qrStudent.id}`} 
+                        width={1.5} 
+                        height={45} 
+                        fontSize={12} 
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-black text-2xl text-slate-900">{qrStudent.name}</p>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="w-fit mx-auto bg-blue-50 text-blue-700 border-blue-200 font-black">
+                        {getGradeLabel(qrStudent.stage, qrStudent.grade)}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button className="w-full font-black bg-slate-900 hover:bg-slate-800 h-11" onClick={() => window.print()}>طباعة الكارت</Button>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <Label className="font-bold text-xs">Barcode للسيريال (لجهاز الليزر)</Label>
-                  <Barcode value={qrStudent.serial} width={1.5} height={45} fontSize={10} />
-                </div>
-              </div>
-              <div>
-                <p className="font-black text-xl">{qrStudent.name}</p>
-                <p className="text-xs text-blue-600 font-bold">المجموعة: {selectedGroup}</p>
-                <p className="text-xs text-green-600 font-bold">ID: {qrStudent.id}</p>
-                <p className="text-xs text-purple-600 font-bold">Serial: {qrStudent.serial}</p>
-              </div>
-              <Button className="w-full font-black" onClick={() => window.print()}>طباعة الكارت</Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+              )}
+            </DialogContent>
+          </Dialog>
     </div>
   );
 }

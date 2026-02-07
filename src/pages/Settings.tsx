@@ -10,8 +10,10 @@ import { twMerge } from 'tailwind-merge';
 function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
 const AUDIT_LOG_KEY = 'audit-log';
+
+// الصلاحيات الافتراضية + الجديد canDeleteAny
 const defaultPermissions = {
-  dashboard: false,  // دائمًا true
+  dashboard: false,  // دائمًا true للكل عادة
   students: false,
   teachers: false,
   groups: false,
@@ -22,8 +24,10 @@ const defaultPermissions = {
   alerts: false,
   archive: false,
   parents: false,
-  settings: false
+  settings: false,
+  canDeleteAny: false  // جديد: لو true يقدر يحذف أي سجل، لو false يحذف بس اللي هو عمله
 };
+
 export default function Settings() {
   const [s, setS] = useState<any>({ 
     name: 'سنتر التفوق التعليمي', 
@@ -37,20 +41,7 @@ export default function Settings() {
     user: '',
     password: '',
     role: 'staff',
-    permissions: {
-      dashboard: false,
-      students: false,
-      teachers: false,
-      groups: false,
-      attendance: false,
-      books: false,
-      exams: false,
-      finance: false,
-      alerts: false,
-      archive: false,
-      parents: false,
-      settings: false
-    },
+    permissions: { ...defaultPermissions },
     locked: false
   });
 
@@ -63,50 +54,52 @@ export default function Settings() {
   const [deleteConfirmCode, setDeleteConfirmCode] = useState('');
 
   useEffect(() => {
-  try {
-    const localS = localStorage.getItem('office_settings');
-    const localU = localStorage.getItem('edu_users');
+    try {
+      const localS = localStorage.getItem('office_settings');
+      const localU = localStorage.getItem('edu_users');
 
-    let parsedSettings = localS ? JSON.parse(localS) : {};
-    let users = localU ? JSON.parse(localU) : [];
+      let parsedSettings = localS ? JSON.parse(localS) : {};
+      let users = localU ? JSON.parse(localU) : [];
 
-    if (!Array.isArray(users)) users = [];
+      if (!Array.isArray(users)) users = [];
 
-    // دمج الصلاحيات الافتراضية لكل مستخدم قديم
-    users = users.map((u: any) => ({
-      ...u,
-      permissions: { ...defaultPermissions, ...u.permissions }
-    }));
+      // دمج الصلاحيات الافتراضية + الجديدة لكل مستخدم قديم
+      users = users.map((u: any) => ({
+        ...u,
+        permissions: { ...defaultPermissions, ...u.permissions }
+      }));
 
-    parsedSettings.users = users;
-
-    if (!parsedSettings.factoryCode) parsedSettings.factoryCode = '1234';
-
-    if (users.length === 0) {
-      users.push({
-        id: Date.now(),
-        name: 'Super Admin',
-        user: 'admin',
-        password: 'admin',
-        role: 'admin',
-        permissions: { 
-          dashboard: true,
-          students: true, teachers: true, groups: true, 
-          attendance: true, exams: true, archive: true, 
-          finance: true, alerts: true, books: true, 
-          parents: true, settings: true 
-        },
-        locked: true
-      });
       parsedSettings.users = users;
-    }
 
-    setS(parsedSettings);
-  } catch (err) {
-    console.error('خطأ في تحميل الإعدادات:', err);
-    toast.error('حدث خطأ أثناء تحميل الإعدادات');
-  }
-}, []);
+      if (!parsedSettings.factoryCode) parsedSettings.factoryCode = '1234';
+
+      if (users.length === 0) {
+        users.push({
+          id: Date.now(),
+          name: 'Super Admin',
+          user: 'admin',
+          password: 'admin',
+          role: 'admin',
+          permissions: { 
+            ...defaultPermissions,
+            dashboard: true,
+            students: true, teachers: true, groups: true, 
+            attendance: true, exams: true, archive: true, 
+            finance: true, alerts: true, books: true, 
+            parents: true, settings: true,
+            canDeleteAny: true
+          },
+          locked: true
+        });
+        parsedSettings.users = users;
+      }
+
+      setS(parsedSettings);
+    } catch (err) {
+      console.error('خطأ في تحميل الإعدادات:', err);
+      toast.error('حدث خطأ أثناء تحميل الإعدادات');
+    }
+  }, []);
 
   const logAction = (type: string, target: string) => {
     const logs = JSON.parse(localStorage.getItem(AUDIT_LOG_KEY) || '[]');
@@ -146,47 +139,31 @@ export default function Settings() {
   };
 
   const resetNewUserForm = () => {
-  setNewUser({
-    name: '',
-    user: '',
-    password: '',
-    role: 'staff',
-    permissions: { ...defaultPermissions },  // استخدم الافتراضي لضمان جميع المفاتيح
-    locked: false
-  });
-  setEditingUser(null);
-};
+    setNewUser({
+      name: '',
+      user: '',
+      password: '',
+      role: 'staff',
+      permissions: { ...defaultPermissions },
+      locked: false
+    });
+    setEditingUser(null);
+  };
 
   const addOrUpdateUser = () => {
-  if (!newUser.user || !newUser.password) {
-    return toast.error('برجاء كتابة اسم المستخدم وكلمة المرور');
-  }
+    if (!newUser.user || !newUser.password) {
+      return toast.error('برجاء كتابة اسم المستخدم وكلمة المرور');
+    }
 
-  const permissions = newUser.role === 'admin' 
-    ? {
-        dashboard: true,
-        students: true,
-        teachers: true,
-        groups: true,
-        attendance: true,
-        books: true,
-        exams: true,
-        finance: true,
-        alerts: true,
-        archive: true,
-        parents: true,
-        settings: true
-      }
-    : {
-        ...defaultPermissions,  // دمج الافتراضي
-        ...newUser.permissions,  // صلاحيات المستخدم تتجاوز الافتراضي
-      };
+    const permissions = newUser.role === 'admin' 
+      ? { ...defaultPermissions, ...Object.fromEntries(Object.keys(defaultPermissions).map(k => [k, true])) }
+      : { ...defaultPermissions, ...newUser.permissions };
 
-  const userToAdd = { 
-    ...newUser, 
-    id: editingUser ? editingUser.id : Date.now(), 
-    permissions 
-  };
+    const userToAdd = { 
+      ...newUser, 
+      id: editingUser ? editingUser.id : Date.now(), 
+      permissions 
+    };
 
     let updatedUsers;
     if (editingUser) {
@@ -199,11 +176,9 @@ export default function Settings() {
       updatedUsers = [...(s.users || []), userToAdd];
     }
 
-    // تحديث الحالة أولاً
     setS({ ...s, users: updatedUsers });
     resetNewUserForm();
 
-    // حفظ بعد تحديث الـ state (بدون refresh)
     setTimeout(() => {
       saveAll();
     }, 100);
@@ -212,13 +187,13 @@ export default function Settings() {
   };
 
   const startEditUser = (u: any) => {
-  if (u.locked) return toast.error('لا يمكن تعديل الحساب المحمي');
-  setNewUser({
-    ...u,
-    permissions: { ...defaultPermissions, ...u.permissions }  // دمج الافتراضي لضمان جميع المفاتيح
-  });
-  setEditingUser(u);
-};
+    if (u.locked) return toast.error('لا يمكن تعديل الحساب المحمي');
+    setNewUser({
+      ...u,
+      permissions: { ...defaultPermissions, ...u.permissions }
+    });
+    setEditingUser(u);
+  };
 
   const startDeleteUser = (u: any) => {
     if (u.locked) return toast.error('لا يمكن حذف الحساب المحمي');
@@ -259,11 +234,11 @@ export default function Settings() {
   };
 
   const togglePerm = (key: string) => {
-  setNewUser(prev => ({
-    ...prev,
-    permissions: { ...defaultPermissions, ...prev.permissions, [key]: !prev.permissions[key] }  // دمج الافتراضي لضمان وجود جميع المفاتيح
-  }));
-};
+    setNewUser(prev => ({
+      ...prev,
+      permissions: { ...defaultPermissions, ...prev.permissions, [key]: !prev.permissions[key] }
+    }));
+  };
 
   const exportBackup = () => {
     const data = { 
@@ -531,7 +506,8 @@ export default function Settings() {
                       alerts: 'التنبيهات',
                       archive: 'الأرشيف',
                       parents: 'أولياء الأمور',
-                      settings: 'الإعدادات'
+                      settings: 'الإعدادات',
+                      canDeleteAny: 'حذف أي سجل (غير مقيد)'  // الجديد
                     };
                     return (
                       <button 

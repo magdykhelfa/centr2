@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from 'sonner';
 import { Badge } from "@/components/ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const FINANCE_KEY = "finance-transactions";
 const STUDENTS_KEY = "students-data";
@@ -19,7 +20,6 @@ const TEACHERS_KEY = "teachers-data";
 const USERS_KEY = "edu_users";
 
 export default function Finance() {
-  // --- States ---
   const [transactions, setTransactions] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -27,12 +27,13 @@ export default function Finance() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isStudentSettingsOpen, setIsStudentSettingsOpen] = useState(false);
   const [isTeacherFinanceOpen, setIsTeacherFinanceOpen] = useState(false);
+  const [isIncomeDetailsOpen, setIsIncomeDetailsOpen] = useState(false);
+  const [isExpenseDetailsOpen, setIsExpenseDetailsOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [receiverFilter, setReceiverFilter] = useState('all');
 
-  // Student Form State
   const [studentForm, setStudentForm] = useState({
     id: '', name: '', subscriptionType: 'per_lesson', packagePrice: 0,
     discountPercentage: 0, selectedSubjects: [] as any[], 
@@ -40,19 +41,28 @@ export default function Finance() {
     receiver: ''
   });
 
-  // Teacher Form State
   const [teacherFinForm, setTeacherFinForm] = useState({
     id: '', name: '', salaryType: 'fixed', fixedSalary: 0, 
-    pricePerLesson: 0, lessonsCount: 0, percentage: 0, notes: ''
+    pricePerLesson: 0, lessonsCount: 0, percentage: 0, notes: '',
+    receiver: ''
   });
 
-  // General Transaction Form State
   const [form, setForm] = useState({ 
     type: 'income', amount: 0, description: '', 
     date: new Date().toISOString().split('T')[0], student: '', category: 'general' 
   });
 
-  // --- Load Data ---
+  // جيب المستخدم الحالي من localStorage
+const currentUserRaw = localStorage.getItem('currentUser');
+let currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+
+// لو مفيش currentUser، جرب نجيب أول مستخدم من edu_users كـ fallback (مؤقت)
+if (!currentUser && users.length > 0) {
+  currentUser = users[0]; // أول مستخدم (ممكن تغيره لاحقًا)
+}
+
+const currentUserId = currentUser?.id?.toString() || currentUser?.user || 'unknown';
+const currentUserName = currentUser?.name || currentUser?.user || 'غير معروف';
   useEffect(() => {
     const loadData = () => {
       setTransactions(JSON.parse(localStorage.getItem(FINANCE_KEY) || "[]"));
@@ -72,7 +82,6 @@ export default function Finance() {
     }
   };
 
-  // --- Calculations ---
   const calculateStudentRequired = (s: any) => {
     if (!s || s.isPackageFree) return 0;
     if (s.subscriptionType === 'per_lesson') {
@@ -97,14 +106,29 @@ export default function Finance() {
     return 0;
   };
 
-  // --- Handlers ---
   const handleSaveTransaction = () => {
+    // التحقق من صلاحية التعديل
+    if (editingTransaction) {
+      const canEditAny = currentUser?.permissions?.canDeleteAny === true;
+
+      if (!canEditAny) {
+        const createdBy = editingTransaction.receiver || editingTransaction.userId || 'unknown';
+        if (createdBy !== currentUserId) {
+          return toast.error('لا يمكنك تعديل هذه العملية لأنها ليست من إضافتك');
+        }
+      }
+    }
+
     let updated;
     if (editingTransaction) {
       updated = transactions.map(t => t.id === editingTransaction.id ? { ...form, id: t.id } : t);
       toast.success('تم تعديل العملية');
     } else {
-      updated = [...transactions, { ...form, id: Date.now() }];
+      updated = [...transactions, { 
+        ...form, 
+        id: Date.now(),
+        receiver: currentUserId  // تلقائي: ID المستخدم الحالي
+      }];
       toast.success('تم إضافة العملية للخزينة');
     }
     saveData(updated);
@@ -112,26 +136,36 @@ export default function Finance() {
   };
 
   const handleDeleteTransaction = (id: number) => {
-    const transactionToDelete = transactions.find(t => t.id === id);
-    
+    const transaction = transactions.find(t => t.id === id);
+    if (!transaction) return toast.error('العملية غير موجودة');
+
+    const canDeleteAny = currentUser?.permissions?.canDeleteAny === true;
+
+    if (!canDeleteAny) {
+      const createdBy = transaction.receiver || transaction.userId || 'unknown';
+      if (createdBy !== currentUserId) {
+        return toast.error('لا يمكنك حذف هذه العملية لأنها ليست من إضافتك');
+      }
+    }
+
     const updatedTx = transactions.filter(t => t.id !== id);
     
     let updatedStudents = [...students];
-    if (transactionToDelete && transactionToDelete.student) {
+    if (transaction.student) {
       updatedStudents = students.map(s => 
-        s.id.toString() === transactionToDelete.student 
+        s.id.toString() === transaction.student 
         ? { ...s, lastUpdateDate: new Date().toISOString().split('T')[0] } 
         : s
       );
-      toast.info(`تم حذف العملية وتحديث حساب الطالب: ${transactionToDelete.description.split(': ')[1] || ''}`);
+      toast.info(`تم حذف العملية وتحديث حساب الطالب`);
     } else {
-      toast.error('تم حذف العملية من الخزينة');
+      toast.success('تم حذف العملية من الخزينة');
     }
 
     setTransactions(updatedTx);
     localStorage.setItem(FINANCE_KEY, JSON.stringify(updatedTx));
     
-    if (transactionToDelete && transactionToDelete.student) {
+    if (transaction.student) {
       setStudents(updatedStudents);
       localStorage.setItem(STUDENTS_KEY, JSON.stringify(updatedStudents));
     }
@@ -145,10 +179,14 @@ export default function Finance() {
     let updatedTx = [...transactions];
     if (paidAmount > 0) {
       updatedTx.push({
-        id: Date.now(), type: 'income', amount: paidAmount,
+        id: Date.now(), 
+        type: 'income', 
+        amount: paidAmount,
         description: `سداد اشتراك - طالب: ${studentForm.name}`,
-        date: selectedDate, student: studentForm.id, category: 'درس',
-        receiver: studentForm.receiver
+        date: selectedDate, 
+        student: studentForm.id, 
+        category: 'درس',
+        receiver: currentUserId  // تلقائي: ID المستخدم الحالي
       });
     }
 
@@ -167,9 +205,13 @@ export default function Finance() {
     if (amount <= 0) return toast.error('المبلغ المستحق صفر');
 
     const newTx = {
-      id: Date.now(), type: 'expense', amount,
+      id: Date.now(), 
+      type: 'expense', 
+      amount,
       description: `صرف مستحقات مدرس: ${teacherFinForm.name} (${teacherFinForm.notes || 'بدون ملاحظات'})`,
-      date: selectedDate, category: 'رواتب'
+      date: selectedDate, 
+      category: 'رواتب',
+      receiver: currentUserId  // تلقائي: ID المستخدم الحالي
     };
     
     saveData([...transactions, newTx]);
@@ -192,7 +234,6 @@ export default function Finance() {
     });
   };
 
-  // فلترة حسب اليوم المختار
   const filteredTransactions = transactions.filter(t => t.date === selectedDate);
 
   const displayedTransactions = receiverFilter === 'all' 
@@ -201,6 +242,20 @@ export default function Finance() {
 
   const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+  const getReceiverDetails = (type: 'income' | 'expense') => {
+    const typeTransactions = filteredTransactions.filter(t => t.type === type);
+    const receivers = [...new Set(typeTransactions.map(t => t.receiver).filter(r => r))];
+    return receivers.map(receiverId => {
+      const receiverTx = typeTransactions.filter(t => t.receiver === receiverId);
+      const total = receiverTx.reduce((sum, t) => sum + t.amount, 0);
+      const receiverName = users.find(u => u.id.toString() === receiverId)?.name || 'غير معروف';
+      return { receiverId, receiverName, total, transactions: receiverTx };
+    }).filter(r => r.total > 0);
+  };
+
+  const incomeDetails = getReceiverDetails('income');
+  const expenseDetails = getReceiverDetails('expense');
 
   return (
     <div className="p-6 space-y-6" dir="rtl">
@@ -211,7 +266,6 @@ export default function Finance() {
           <p className="text-muted-foreground font-bold text-xs uppercase opacity-70">التحصيل، الرواتب، وحركة الخزينة</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* اختيار التاريخ */}
           <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-dashed border-slate-300">
             <span className="text-sm font-bold text-slate-700">التاريخ:</span>
             <Input 
@@ -236,8 +290,8 @@ export default function Finance() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard value={totalIncome} label="إجمالي المقبوضات (اليوم)" type="income" icon={<ArrowUpCircle className="w-5 h-5" />} />
-        <SummaryCard value={totalExpenses} label="إجمالي المصروفات (اليوم)" type="expense" icon={<ArrowDownCircle className="w-5 h-5" />} />
+        <SummaryCard value={totalIncome} label="إجمالي المقبوضات (اليوم)" type="income" icon={<ArrowUpCircle className="w-5 h-5" />} onClick={() => setIsIncomeDetailsOpen(true)} />
+        <SummaryCard value={totalExpenses} label="إجمالي المصروفات (اليوم)" type="expense" icon={<ArrowDownCircle className="w-5 h-5" />} onClick={() => setIsExpenseDetailsOpen(true)} />
         <SummaryCard value={totalIncome - totalExpenses} label="صافي الخزينة (اليوم)" type="profit" icon={<Receipt className="w-5 h-5" />} />
       </div>
 
@@ -263,7 +317,7 @@ export default function Finance() {
               </TableHeader>
               <TableBody>
                 {students.map((s) => {
-                    const paid = transactions.filter(t => t.type === 'income' && t.student === s.id.toString()).reduce((sum, t) => sum + t.amount, 0);
+                  const paid = transactions.filter(t => t.type === 'income' && t.student === s.id.toString()).reduce((sum, t) => sum + t.amount, 0);
                   const required = calculateStudentRequired(s);
                   return (
                     <TableRow key={s.id}>
@@ -347,8 +401,12 @@ export default function Finance() {
                     <TableCell className="font-medium">{t.description}</TableCell>
                     <TableCell className={`font-bold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.amount} ج</TableCell>
                     <TableCell className="flex justify-center gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingTransaction(t); setForm(t); setIsDialogOpen(true); }}><Edit className="w-4 h-4 text-blue-600" /></Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTransaction(t.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingTransaction(t); setForm(t); setIsDialogOpen(true); }}>
+                        <Edit className="w-4 h-4 text-blue-600" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTransaction(t.id)}>
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -358,10 +416,14 @@ export default function Finance() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog: تحصيل اشتراك طالب - كامل بدون حذف */}
+      {/* Dialog: تحصيل اشتراك طالب */}
       <Dialog open={isStudentSettingsOpen} onOpenChange={setIsStudentSettingsOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto text-right p-4" dir="rtl">
-          <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-blue-600"><UserCheck /> تحصيل رسوم الطالب</DialogTitle></DialogHeader>
+          <DialogHeader className="border-b pb-3 mb-4">
+            <DialogTitle className="font-black flex items-center gap-2 text-blue-600">
+              <UserCheck /> تحصيل رسوم الطالب
+            </DialogTitle>
+          </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3 space-y-3 bg-slate-50 p-4 rounded-xl border">
               <Label className="font-bold text-xs">1. ابحث عن الطالب</Label>
@@ -369,74 +431,78 @@ export default function Finance() {
               <div className="h-[300px] overflow-y-auto border rounded-lg bg-white p-1">
                 {students.filter(s => s.name.includes(searchTerm)).map(s => (
                   <div key={s.id} onClick={() => setStudentForm({ ...studentForm, ...s, id: s.id.toString(), manualDebt: 0 })}
-                    className={`p-2 cursor-pointer rounded-md text-xs font-bold mb-1 transition-colors ${studentForm.id === s.id.toString() ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-600'}`}>{s.name}</div>
+                    className={`p-2 cursor-pointer rounded-md text-xs font-bold mb-1 transition-colors ${studentForm.id === s.id.toString() ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-600'}`}>
+                    {s.name}
+                  </div>
                 ))}
               </div>
             </div>
 
             <div className="md:col-span-9 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-xl border shadow-sm items-end">
-                 <div className="space-y-1"><Label className="font-bold text-xs">نظام المحاسبة</Label>
-                    <Select value={studentForm.subscriptionType} onValueChange={(v) => setStudentForm({...studentForm, subscriptionType: v})}>
-                        <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="per_lesson">تلقائي (بالحصة)</SelectItem>
-                            <SelectItem value="full_package">مبلغ ثابت (باكدج)</SelectItem>
-                            <SelectItem value="discounted_package">باكدج مع خصم</SelectItem>
-                        </SelectContent>
-                    </Select>
-                 </div>
-                 <div className="space-y-1"><Label className="font-bold text-xs text-red-600">المتبقي (دين سابق)</Label>
-                    <Input type="number" value={studentForm.manualDebt} onChange={(e) => setStudentForm({...studentForm, manualDebt: Number(e.target.value)})} className="h-10 font-black text-red-600" />
-                 </div>
-                 <div className="space-y-1"><Label className="font-bold text-xs">ملاحظات التحصيل</Label>
-                    <Input value={studentForm.notes} onChange={(e) => setStudentForm({...studentForm, notes: e.target.value})} className="h-10 text-xs" />
-                 </div>
-                 <div className="space-y-1"><Label className="font-bold text-xs">المستلم</Label>
-                    <Select value={studentForm.receiver} onValueChange={(v) => setStudentForm({...studentForm, receiver: v})}>
-                        <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            {users.map((u: any) => (
-                              <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                 </div>
+                <div className="space-y-1">
+                  <Label className="font-bold text-xs">نظام المحاسبة</Label>
+                  <Select value={studentForm.subscriptionType} onValueChange={(v) => setStudentForm({...studentForm, subscriptionType: v})}>
+                    <SelectTrigger className="h-10 text-xs font-bold"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="per_lesson">تلقائي (بالحصة)</SelectItem>
+                      <SelectItem value="full_package">مبلغ ثابت (باكدج)</SelectItem>
+                      <SelectItem value="discounted_package">باكدج مع خصم</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold text-xs text-red-600">المتبقي (دين سابق)</Label>
+                  <Input type="number" value={studentForm.manualDebt} onChange={(e) => setStudentForm({...studentForm, manualDebt: Number(e.target.value)})} className="h-10 font-black text-red-600" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold text-xs">ملاحظات التحصيل</Label>
+                  <Input value={studentForm.notes} onChange={(e) => setStudentForm({...studentForm, notes: e.target.value})} className="h-10 text-xs" />
+                </div>
+                {/* خانة المستلم بالاسم وتلقائية */}
+                <div className="space-y-1">
+                  <Label className="font-bold text-xs">المستلم</Label>
+                  <div className="h-10 px-3 flex items-center bg-slate-100 rounded-lg border text-xs font-bold text-slate-700">
+                    {currentUserName}
+                  </div>
+                </div>
               </div>
 
               {studentForm.subscriptionType !== 'per_lesson' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-orange-50/40 p-4 rounded-xl border border-orange-100 animate-in fade-in zoom-in-95 duration-200">
-                   <div className="space-y-1">
-                      <Label className="font-bold text-xs text-orange-700">سعر الباكدج بالكامل</Label>
-                      <Input type="number" value={studentForm.packagePrice} onChange={(e) => setStudentForm({...studentForm, packagePrice: Number(e.target.value)})} className="h-10 bg-white" />
-                   </div>
-                   {studentForm.subscriptionType === 'discounted_package' && (
-                     <div className="space-y-1">
-                        <Label className="font-bold text-xs text-orange-700">نسبة الخصم (%)</Label>
-                        <Input type="number" value={studentForm.discountPercentage} onChange={(e) => setStudentForm({...studentForm, discountPercentage: Number(e.target.value)})} className="h-10 bg-white" />
-                     </div>
-                   )}
+                  <div className="space-y-1">
+                    <Label className="font-bold text-xs text-orange-700">سعر الباكدج بالكامل</Label>
+                    <Input type="number" value={studentForm.packagePrice} onChange={(e) => setStudentForm({...studentForm, packagePrice: Number(e.target.value)})} className="h-10 bg-white" />
+                  </div>
+                  {studentForm.subscriptionType === 'discounted_package' && (
+                    <div className="space-y-1">
+                      <Label className="font-bold text-xs text-orange-700">نسبة الخصم (%)</Label>
+                      <Input type="number" value={studentForm.discountPercentage} onChange={(e) => setStudentForm({...studentForm, discountPercentage: Number(e.target.value)})} className="h-10 bg-white" />
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
-                    <Label className="font-black text-sm text-blue-800">تفاصيل الحصص للمواد المختارة</Label>
-                    <div className="flex items-center gap-2 bg-purple-50 p-1 px-3 rounded-full border border-purple-100">
-                        <Label className="font-black text-purple-700 text-[10px]">إعفاء مجاني</Label>
-                        <Switch checked={studentForm.isPackageFree} onCheckedChange={(v) => setStudentForm({...studentForm, isPackageFree: v})} className="scale-75" />
-                    </div>
+                  <Label className="font-black text-sm text-blue-800">تفاصيل الحصص للمواد المختارة</Label>
+                  <div className="flex items-center gap-2 bg-purple-50 p-1 px-3 rounded-full border border-purple-100">
+                    <Label className="font-black text-purple-700 text-[10px]">إعفاء مجاني</Label>
+                    <Switch checked={studentForm.isPackageFree} onCheckedChange={(v) => setStudentForm({...studentForm, isPackageFree: v})} className="scale-75" />
+                  </div>
                 </div>
                 
                 <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
                   <Table>
-                    <TableHeader className="bg-slate-50"><TableRow>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
                         <TableHead className="w-10"></TableHead>
                         <TableHead className="text-right">المادة</TableHead>
                         <TableHead className="text-center">السعر</TableHead>
                         <TableHead className="text-center">العدد</TableHead>
                         <TableHead className="text-left px-6">إجمالي</TableHead>
-                    </TableRow></TableHeader>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                       {teachers.map((teacher) => {
                         const subData = studentForm.selectedSubjects.find(sub => sub.teacherId === teacher.id);
@@ -445,15 +511,37 @@ export default function Finance() {
                           <TableRow key={teacher.id} className={isSelected ? "bg-blue-50/20" : "opacity-50"}>
                             <TableCell className="p-2"><Checkbox checked={isSelected} onCheckedChange={() => handleSubjectToggle(teacher)} /></TableCell>
                             <TableCell className="p-2 font-bold text-xs">{teacher.subject}</TableCell>
-                            <TableCell className="p-2"><Input type="number" disabled={!isSelected} value={isSelected ? subData.lessonPrice : ""} onChange={(e) => {
-                              const updated = studentForm.selectedSubjects.map(s => s.teacherId === teacher.id ? {...s, lessonPrice: Number(e.target.value)} : s);
-                              setStudentForm({...studentForm, selectedSubjects: updated});
-                            }} className="h-8 text-center text-xs font-black w-20 mx-auto" /></TableCell>
-                            <TableCell className="p-2"><Input type="number" disabled={!isSelected} value={isSelected ? subData.lessonsCount : ""} onChange={(e) => {
-                              const updated = studentForm.selectedSubjects.map(s => s.teacherId === teacher.id ? {...s, lessonsCount: Number(e.target.value)} : s);
-                              setStudentForm({...studentForm, selectedSubjects: updated});
-                            }} className="h-8 text-center text-xs font-black w-16 mx-auto" /></TableCell>
-                            <TableCell className="p-2 text-left px-6 font-black text-blue-700">{isSelected ? (subData.lessonPrice * subData.lessonsCount) : 0} ج</TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                type="number" 
+                                disabled={!isSelected} 
+                                value={isSelected ? subData.lessonPrice : ""} 
+                                onChange={(e) => {
+                                  const updated = studentForm.selectedSubjects.map(s => 
+                                    s.teacherId === teacher.id ? {...s, lessonPrice: Number(e.target.value)} : s
+                                  );
+                                  setStudentForm({...studentForm, selectedSubjects: updated});
+                                }} 
+                                className="h-8 text-center text-xs font-black w-20 mx-auto" 
+                              />
+                            </TableCell>
+                            <TableCell className="p-2">
+                              <Input 
+                                type="number" 
+                                disabled={!isSelected} 
+                                value={isSelected ? subData.lessonsCount : ""} 
+                                onChange={(e) => {
+                                  const updated = studentForm.selectedSubjects.map(s => 
+                                    s.teacherId === teacher.id ? {...s, lessonsCount: Number(e.target.value)} : s
+                                  );
+                                  setStudentForm({...studentForm, selectedSubjects: updated});
+                                }} 
+                                className="h-8 text-center text-xs font-black w-16 mx-auto" 
+                              />
+                            </TableCell>
+                            <TableCell className="p-2 text-left px-6 font-black text-blue-700">
+                              {isSelected ? (subData.lessonPrice * subData.lessonsCount) : 0} ج
+                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -463,10 +551,20 @@ export default function Finance() {
 
                 <div className="flex gap-4 items-stretch h-16 pt-2">
                   <div className="flex-1 bg-slate-900 text-white p-3 px-6 rounded-xl flex items-center justify-between shadow-xl">
-                    <div><p className="text-[10px] font-bold text-slate-400">الصافي للتحصيل:</p><p className="text-2xl font-black text-green-400">{calculateStudentRequired(studentForm) - (studentForm.manualDebt || 0)} ج.م</p></div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400">الصافي للتحصيل:</p>
+                      <p className="text-2xl font-black text-green-400">
+                        {calculateStudentRequired(studentForm) - (studentForm.manualDebt || 0)} ج.م
+                      </p>
+                    </div>
                     <Calculator className="w-8 h-8 opacity-20" />
                   </div>
-                  <Button className="flex-[0.6] bg-blue-600 hover:bg-blue-700 font-black rounded-xl text-lg shadow-xl" onClick={handleSaveStudentFinance}>حفظ الدفع</Button>
+                  <Button 
+                    className="flex-[0.6] bg-blue-600 hover:bg-blue-700 font-black rounded-xl text-lg shadow-xl" 
+                    onClick={handleSaveStudentFinance}
+                  >
+                    حفظ الدفع
+                  </Button>
                 </div>
               </div>
             </div>
@@ -474,23 +572,33 @@ export default function Finance() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: حساب المدرس - كامل بدون حذف */}
+      {/* Dialog: حساب المدرس */}
       <Dialog open={isTeacherFinanceOpen} onOpenChange={setIsTeacherFinanceOpen}>
         <DialogContent className="max-w-4xl text-right" dir="rtl">
-          <DialogHeader className="border-b pb-3 mb-4"><DialogTitle className="font-black flex items-center gap-2 text-orange-600"><Wallet /> تسوية وصرف مستحقات المدرس</DialogTitle></DialogHeader>
+          <DialogHeader className="border-b pb-3 mb-4">
+            <DialogTitle className="font-black flex items-center gap-2 text-orange-600">
+              <Wallet /> تسوية وصرف مستحقات المدرس
+            </DialogTitle>
+          </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-4 bg-slate-50 p-4 rounded-xl border">
               <Label className="font-bold text-xs mb-2 block">اختر المدرس</Label>
               <div className="h-[300px] overflow-y-auto space-y-1">
                 {teachers.map(t => (
-                  <div key={t.id} onClick={() => setTeacherFinForm({ ...teacherFinForm, ...t, id: t.id.toString() })}
-                    className={`p-3 rounded-lg text-xs font-black cursor-pointer transition-all ${teacherFinForm.id === t.id.toString() ? 'bg-orange-600 text-white shadow-md' : 'bg-white border hover:bg-orange-50'}`}>{t.name}</div>
+                  <div 
+                    key={t.id} 
+                    onClick={() => setTeacherFinForm({ ...teacherFinForm, ...t, id: t.id.toString() })}
+                    className={`p-3 rounded-lg text-xs font-black cursor-pointer transition-all ${teacherFinForm.id === t.id.toString() ? 'bg-orange-600 text-white shadow-md' : 'bg-white border hover:bg-orange-50'}`}
+                  >
+                    {t.name}
+                  </div>
                 ))}
               </div>
             </div>
             <div className="md:col-span-8 space-y-5">
-              <div className="grid grid-cols-2 gap-4 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
-                <div className="space-y-1"><Label className="text-xs font-bold">نظام الدفع للمدرس</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">نظام الدفع للمدرس</Label>
                   <Select value={teacherFinForm.salaryType} onValueChange={(v) => setTeacherFinForm({...teacherFinForm, salaryType: v})}>
                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -500,7 +608,15 @@ export default function Finance() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1"><Label className="text-xs font-bold">ملاحظات الصرف</Label>
+                {/* خانة المستلم بالاسم وتلقائية */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">المستلم</Label>
+                  <div className="h-10 px-3 flex items-center bg-slate-100 rounded-lg border text-xs font-bold text-slate-700">
+                    {currentUserName}
+                  </div>
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="text-xs font-bold">ملاحظات الصرف</Label>
                   <Input value={teacherFinForm.notes} onChange={(e) => setTeacherFinForm({...teacherFinForm, notes: e.target.value})} className="bg-white" placeholder="مثال: شهر يناير.." />
                 </div>
               </div>
@@ -514,18 +630,37 @@ export default function Finance() {
                 )}
                 {teacherFinForm.salaryType !== 'fixed' && (
                   <>
-                    <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">سعر الحصة</Label><Input type="number" value={teacherFinForm.pricePerLesson} onChange={(e) => setTeacherFinForm({...teacherFinForm, pricePerLesson: Number(e.target.value)})} /></div>
-                    <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">عدد الحصص</Label><Input type="number" value={teacherFinForm.lessonsCount} onChange={(e) => setTeacherFinForm({...teacherFinForm, lessonsCount: Number(e.target.value)})} /></div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-orange-700">سعر الحصة</Label>
+                      <Input type="number" value={teacherFinForm.pricePerLesson} onChange={(e) => setTeacherFinForm({...teacherFinForm, pricePerLesson: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-orange-700">عدد الحصص</Label>
+                      <Input type="number" value={teacherFinForm.lessonsCount} onChange={(e) => setTeacherFinForm({...teacherFinForm, lessonsCount: Number(e.target.value)})} />
+                    </div>
                     {teacherFinForm.salaryType === 'percentage' && (
-                      <div className="space-y-1"><Label className="text-xs font-bold text-orange-700">النسبة (%)</Label><Input type="number" value={teacherFinForm.percentage} onChange={(e) => setTeacherFinForm({...teacherFinForm, percentage: Number(e.target.value)})} /></div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold text-orange-700">النسبة (%)</Label>
+                        <Input type="number" value={teacherFinForm.percentage} onChange={(e) => setTeacherFinForm({...teacherFinForm, percentage: Number(e.target.value)})} />
+                      </div>
                     )}
                   </>
                 )}
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl flex items-center justify-between text-white shadow-2xl">
-                <div><p className="text-xs font-bold text-slate-400">إجمالي المستحق للمدرس الآن:</p><p className="text-4xl font-black text-orange-400">{calculateTeacherDues(teacherFinForm)} <span className="text-lg">ج.م</span></p></div>
-                <Button className="bg-orange-600 hover:bg-orange-700 font-black px-10 h-14 rounded-xl text-lg shadow-lg" onClick={handleSaveTeacherPayment}>تأكيد صرف المستحقات</Button>
+                <div>
+                  <p className="text-xs font-bold text-slate-400">إجمالي المستحق للمدرس الآن:</p>
+                  <p className="text-4xl font-black text-orange-400">
+                    {calculateTeacherDues(teacherFinForm)} <span className="text-lg">ج.م</span>
+                  </p>
+                </div>
+                <Button 
+                  className="bg-orange-600 hover:bg-orange-700 font-black px-10 h-14 rounded-xl text-lg shadow-lg" 
+                  onClick={handleSaveTeacherPayment}
+                >
+                  تأكيد صرف المستحقات
+                </Button>
               </div>
             </div>
           </div>
@@ -535,20 +670,123 @@ export default function Finance() {
       {/* Dialog: إضافة حركة خزينة عامة */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="text-right" dir="rtl">
-          <DialogHeader><DialogTitle className="font-black">تسجيل حركة مالية</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="font-black">تسجيل حركة مالية</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label className="font-bold">النوع</Label>
+              <div className="space-y-2">
+                <Label className="font-bold">النوع</Label>
                 <Select value={form.type} onValueChange={(v) => setForm({...form, type: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="income">إيراد (+)</SelectItem><SelectItem value="expense">مصروف (-)</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="income">إيراد (+)</SelectItem>
+                    <SelectItem value="expense">مصروف (-)</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label className="font-bold">المبلغ</Label><Input type="number" value={form.amount} onChange={(e) => setForm({...form, amount: Number(e.target.value)})} /></div>
+              <div className="space-y-2">
+                <Label className="font-bold">المبلغ</Label>
+                <Input type="number" value={form.amount} onChange={(e) => setForm({...form, amount: Number(e.target.value)})} />
+              </div>
             </div>
-            <div className="space-y-2"><Label className="font-bold">البيان / الوصف</Label><Input value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} /></div>
-            <div className="space-y-2"><Label className="font-bold">التاريخ</Label><Input type="date" value={form.date} onChange={(e) => setForm({...form, date: e.target.value})} /></div>
-            <Button className="w-full bg-slate-900 font-black h-12 rounded-xl shadow-lg" onClick={handleSaveTransaction}>حفظ في الخزينة</Button>
+            <div className="space-y-2">
+              <Label className="font-bold">البيان / الوصف</Label>
+              <Input value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold">التاريخ</Label>
+              <Input type="date" value={form.date} onChange={(e) => setForm({...form, date: e.target.value})} />
+            </div>
+            {/* خانة المستلم بالاسم وتلقائية */}
+            <div className="space-y-2">
+              <Label className="font-bold">المستلم</Label>
+              <div className="h-10 px-3 flex items-center bg-slate-100 rounded-lg border text-xs font-bold text-slate-700">
+                {currentUserName}
+              </div>
+            </div>
+            <Button 
+              className="w-full bg-slate-900 font-black h-12 rounded-xl shadow-lg" 
+              onClick={handleSaveTransaction}
+            >
+              حفظ في الخزينة
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: تفاصيل المقبوضات */}
+      <Dialog open={isIncomeDetailsOpen} onOpenChange={setIsIncomeDetailsOpen}>
+        <DialogContent className="max-w-4xl text-right" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-black">تفاصيل المقبوضات اليوم</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Accordion type="single" collapsible className="w-full">
+              {incomeDetails.map((detail, index) => (
+                <AccordionItem key={detail.receiverId} value={`item-${index}`}>
+                  <AccordionTrigger className="font-bold">
+                    {detail.receiverName} - إجمالي: {detail.total} ج
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">البيان</TableHead>
+                          <TableHead className="text-right">المبلغ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detail.transactions.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>{tx.description}</TableCell>
+                            <TableCell className="text-green-600">{tx.amount} ج</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: تفاصيل المصروفات */}
+      <Dialog open={isExpenseDetailsOpen} onOpenChange={setIsExpenseDetailsOpen}>
+        <DialogContent className="max-w-4xl text-right" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-black">تفاصيل المصروفات اليوم</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Accordion type="single" collapsible className="w-full">
+              {expenseDetails.map((detail, index) => (
+                <AccordionItem key={detail.receiverId} value={`item-${index}`}>
+                  <AccordionTrigger className="font-bold">
+                    {detail.receiverName} - إجمالي: {detail.total} ج
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">البيان</TableHead>
+                          <TableHead className="text-right">المبلغ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detail.transactions.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>{tx.description}</TableCell>
+                            <TableCell className="text-red-600">{tx.amount} ج</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         </DialogContent>
       </Dialog>
@@ -556,14 +794,14 @@ export default function Finance() {
   );
 }
 
-function SummaryCard({ value, label, type, icon }: { value: number, label: string, type: 'income' | 'expense' | 'profit', icon: any }) {
+function SummaryCard({ value, label, type, icon, onClick }: { value: number, label: string, type: 'income' | 'expense' | 'profit', icon: any, onClick?: () => void }) {
   const colors = { 
     income: 'bg-green-50 text-green-700 border-green-100', 
     expense: 'bg-red-50 text-red-700 border-red-100', 
     profit: 'bg-blue-50 text-blue-700 border-blue-100' 
   };
   return (
-    <Card className={`${colors[type]} border shadow-sm rounded-2xl overflow-hidden`}>
+    <Card className={`${colors[type]} border shadow-sm rounded-2xl overflow-hidden cursor-pointer`} onClick={onClick}>
       <CardContent className="p-5 flex items-center justify-between">
         <div className="text-right">
           <div className="text-2xl font-black">{value} ج</div>

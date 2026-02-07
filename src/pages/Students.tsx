@@ -575,7 +575,6 @@ useEffect(() => {
                 <Badge variant="outline" className="w-fit mx-auto bg-blue-50 text-blue-700 border-blue-200 font-black">
                   {getGradeLabel(qrStudent.stage, qrStudent.grade)}
                 </Badge>
-                <p className="text-xs text-slate-500 font-bold">المدرس: {qrStudent.teacherName}</p>
               </div>
             </div>
             <Button className="w-full font-black bg-slate-900 hover:bg-slate-800 h-11" onClick={() => window.print()}>طباعة الكارت</Button>
